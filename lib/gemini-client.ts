@@ -30,7 +30,7 @@ export async function streamGemini(
 ): Promise<ReadableStream<Uint8Array>> {
   const debug = opts.debug === true
   const reqId = opts.reqId ?? 'na'
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:streamGenerateContent?key=${apiKey}&alt=sse`
+  const url = `https://generativelanguage.googleapis.com/v1/models/gemini-2.5-flash:streamGenerateContent?key=${apiKey}&alt=sse`
 
   const upstream = await fetch(url, {
     method: 'POST',
