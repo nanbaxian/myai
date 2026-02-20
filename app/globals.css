@@ -1,0 +1,83 @@
+/* app/globals.css */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ================================================
+   Google Fonts 引入
+   ================================================ */
+@import url('https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@300;400;500&family=Noto+Sans+SC:wght@300;400;500&family=DM+Serif+Display:ital@0;1&display=swap');
+
+/* ================================================
+   基础样式
+   ================================================ */
+@layer base {
+  html, body {
+    @apply h-full;
+    font-family: 'Noto Sans SC', sans-serif;
+    color: #1a1410;
+    background: #f5f0e8;
+  }
+
+  /* 纸张纹理（全局背景叠加） */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='300'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='300' height='300' filter='url(%23n)' opacity='0.035'/%3E%3C/svg%3E");
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  /* Scrollbar */
+  ::-webkit-scrollbar { width: 4px; height: 4px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { @apply bg-paper-deep rounded-full; }
+  ::-webkit-scrollbar-thumb:hover { @apply bg-ink-mute; }
+}
+
+/* ================================================
+   可复用组件样式
+   ================================================ */
+@layer components {
+
+  /* 表单标签 */
+  .field-label {
+    @apply text-[12px] font-medium text-ink-soft uppercase tracking-[0.06em] block;
+  }
+
+  /* 表单输入框 */
+  .field-input {
+    @apply w-full px-3.5 py-2.5 rounded-xl border border-paper-deep bg-white text-ink text-sm outline-none transition-all;
+  }
+
+  .field-input:focus {
+    @apply border-accent-soft shadow-[0_0_0_3px_rgba(196,67,42,0.1)];
+  }
+
+  /* 工具栏按钮 */
+  .tool-btn {
+    @apply w-8 h-8 rounded-lg border border-paper-deep bg-transparent text-ink-mute text-[15px]
+           flex items-center justify-center cursor-pointer transition-all
+           hover:bg-paper-warm hover:text-ink hover:border-ink-mute
+           disabled:opacity-40 disabled:cursor-not-allowed;
+  }
+}
+
+/* ================================================
+   工具类
+   ================================================ */
+@layer utilities {
+  /* 多行文字截断 */
+  .line-clamp-2 {
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+
+  /* 平滑滚动 */
+  .scroll-smooth {
+    scroll-behavior: smooth;
+  }
+}

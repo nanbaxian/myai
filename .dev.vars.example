@@ -1,0 +1,14 @@
+# .dev.vars — 本地开发环境变量（等同于 .env.local）
+# 必须加入 .gitignore，绝对不要提交！
+# 生产环境变量在 Cloudflare Dashboard 里设置
+
+GEMINI_API_KEY=your-gemini-api-key-here
+DEEPGRAM_API_KEY=your-deepgram-api-key-here
+GOOGLE_TTS_API_KEY=your-google-tts-api-key-here
+ELEVENLABS_API_KEY=your-elevenlabs-api-key-here
+ELEVENLABS_VOICE_ID=optional-elevenlabs-voice-id
+SUPABASE_URL=https://xxxxxxxx.supabase.co
+SUPABASE_SERVICE_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.your-service-role-key
+SUPABASE_JWT_ISS=https://xxxxxxxx.supabase.co/auth/v1
+SUPABASE_JWT_AUD=authenticated
+CRON_SECRET=any-random-string-you-choose

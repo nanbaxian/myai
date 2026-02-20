@@ -1,0 +1,26 @@
+# wrangler.toml — Cloudflare Pages 配置
+# ⚠️ Pages Functions 不支持 Cron Triggers
+# Cron 请用独立 Worker：wrangler deploy --config workers/wrangler-cron.toml
+
+name = "xin-yu"
+compatibility_date = "2024-09-23"
+compatibility_flags = ["nodejs_compat"]
+pages_build_output_dir = "out"
+
+[dev]
+port = 8788
+
+# Workers AI binding — 用于 @cf/baai/bge-m3 向量嵌入（1024维，60k tokens）
+# 避免调用 Gemini embedding API 被地区封锁（HKG/EU 等节点会被 Google 拒绝）
+[ai]
+binding = "AI"
+
+# 环境变量在 CF Dashboard > Pages > Settings > Environment variables 配置：
+# GEMINI_API_KEY       = "..."
+# DEEPGRAM_API_KEY     = "..."   # Free ASR
+# GOOGLE_TTS_API_KEY   = "..."   # Free TTS
+# ELEVENLABS_API_KEY   = "..."   # Pro TTS
+# ELEVENLABS_VOICE_ID  = "..."   # Pro voice (optional)
+# SUPABASE_URL         = "..."
+# SUPABASE_SERVICE_KEY = "..."
+# CRON_SECRET          = "..."
