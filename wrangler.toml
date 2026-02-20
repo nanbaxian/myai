@@ -15,6 +15,13 @@ port = 8788
 [ai]
 binding = "AI"
 
+[[kv_namespaces]]
+binding = "VOICE_KV"
+id = "b37aa1043f544632a002618ec4270bc2"
+
+[[r2_buckets]]
+binding = "BUCKET"
+bucket_name = "myai"
 # 环境变量在 CF Dashboard > Pages > Settings > Environment variables 配置：
 # GEMINI_API_KEY       = "..."
 # DEEPGRAM_API_KEY     = "..."   # Free ASR
