@@ -7,6 +7,16 @@ export interface GeminiMessage {
   parts: Array<{ text: string } | { inlineData: { mimeType: string; data: string } }>
 }
 
+function extractTextParts(parsed: unknown): string {
+  const parts = (parsed as { candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }> })
+    ?.candidates?.[0]?.content?.parts
+  if (!Array.isArray(parts)) return ''
+  return parts
+    .map(p => (typeof p?.text === 'string' ? p.text : ''))
+    .filter(Boolean)
+    .join('')
+}
+
 export async function streamGemini(
   apiKey: string,
   systemPrompt: string,
@@ -61,7 +71,7 @@ export async function streamGemini(
         if (!raw || raw === '[DONE]') continue
         try {
           const parsed = JSON.parse(raw)
-          const piece: string = parsed?.candidates?.[0]?.content?.parts?.[0]?.text ?? ''
+          const piece = extractTextParts(parsed)
           if (piece) {
             fullText += piece
             ctrl.enqueue(encoder.encode(`data: ${JSON.stringify({ text: piece })}\n\n`))
@@ -74,6 +84,11 @@ export async function streamGemini(
               const safetyMsg = '（这个话题我不太方便回答，换个话题聊聊？）'
               fullText = safetyMsg
               ctrl.enqueue(encoder.encode(`data: ${JSON.stringify({ text: safetyMsg })}\n\n`))
+            }
+            if (!fullText) {
+              const fallbackMsg = '我这边暂时没有生成出内容，换个说法再试试。'
+              fullText = fallbackMsg
+              ctrl.enqueue(encoder.encode(`data: ${JSON.stringify({ text: fallbackMsg })}\n\n`))
             }
             doneSent = true
             ctrl.enqueue(encoder.encode(`data: ${JSON.stringify({ done: true, full: fullText })}\n\n`))
@@ -88,7 +103,7 @@ export async function streamGemini(
         if (raw && raw !== '[DONE]') {
           try {
             const parsed = JSON.parse(raw)
-            const piece: string = parsed?.candidates?.[0]?.content?.parts?.[0]?.text ?? ''
+            const piece = extractTextParts(parsed)
             if (piece) {
               fullText += piece
               ctrl.enqueue(encoder.encode(`data: ${JSON.stringify({ text: piece })}\n\n`))
@@ -98,6 +113,11 @@ export async function streamGemini(
       }
       // 只有 finishReason 没触发过时才在 flush 里补发 done（兜底）
       if (!doneSent) {
+        if (!fullText) {
+          const fallbackMsg = '我这边暂时没有生成出内容，换个说法再试试。'
+          fullText = fallbackMsg
+          ctrl.enqueue(encoder.encode(`data: ${JSON.stringify({ text: fallbackMsg })}\n\n`))
+        }
         ctrl.enqueue(encoder.encode(`data: ${JSON.stringify({ done: true, full: fullText })}\n\n`))
       }
     },

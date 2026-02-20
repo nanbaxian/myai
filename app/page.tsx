@@ -116,9 +116,10 @@ export default function Home() {
             }
             if (data.done) {
               finished = true
+              const finalText = aiContent || '我这边暂时没有生成出内容，换个说法再试试。'
               setMessages(prev =>
                 prev.map(m => m.id === typingId
-                  ? { ...m, id: 'ai-' + Date.now(), is_typing: false, content: aiContent }
+                  ? { ...m, id: 'ai-' + Date.now(), is_typing: false, content: finalText }
                   : m
                 )
               )
