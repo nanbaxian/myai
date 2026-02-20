@@ -10,6 +10,7 @@ interface Env {
   BUCKET: R2Bucket
 
   GEMINI_API_KEY: string
+  DEBUG_GEMINI?: string
   SUPABASE_URL: string
   SUPABASE_SERVICE_KEY: string
   AI: Ai  // Workers AI binding — @cf/baai/bge-m3 向量嵌入（1024维）
@@ -45,12 +46,17 @@ const cors = {
 export const onRequestOptions = (): Response => new Response(null, { headers: cors })
 
 export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
+  const reqId = crypto.randomUUID().slice(0, 8)
+  const debug = env.DEBUG_GEMINI === '1'
   let body: { message?: string; imageBase64?: string }
   try { body = await request.json() }
   catch { return errJson('请求格式错误', 400) }
 
   const { message = '', imageBase64 } = body
   if (!message && !imageBase64) return errJson('消息不能为空', 400)
+  if (debug) {
+    console.log(`[chat ${reqId}] in message_len=${message.length} has_image=${Boolean(imageBase64)}`)
+  }
 
   const sbUrl = env.SUPABASE_URL
   const sbKey = env.SUPABASE_SERVICE_KEY
@@ -65,6 +71,12 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   // ③ 构建 prompt 和消息历史
   const systemPrompt = buildSystemPrompt(persona, memory)
   const messages     = buildMessageHistory(memory, message, imageBase64)
+  if (debug) {
+    console.log(
+      `[chat ${reqId}] persona=${persona.id} short=${memory.shortTermMessages.length} ` +
+      `core=${memory.coreMemories.length} sem=${memory.semanticMatches.length} history=${messages.length}`
+    )
+  }
 
   // ④ 异步保存用户消息（不阻塞流式）
   const saveUserMsg = saveMessage(sbUrl, sbKey, 'user',
@@ -73,7 +85,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   ).catch(e => console.error('[save user msg]', e))
 
   // ⑤ 调用 Gemini 流式
-  const geminiStream = await streamGemini(env.GEMINI_API_KEY, systemPrompt, messages)
+  const geminiStream = await streamGemini(env.GEMINI_API_KEY, systemPrompt, messages, { debug, reqId })
 
   // ⑥ 拦截流 → 捕获完整回复后保存 AI 消息
   let fullText  = ''
@@ -92,8 +104,10 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
           try {
             const d = JSON.parse(line.slice(6))
             if (d.text)             fullText += d.text
+            if (debug && d.error)   console.error(`[chat ${reqId}] stream_error=${String(d.error).slice(0, 300)}`)
             if (d.done && !savedAi) {
               savedAi = true
+              if (debug) console.log(`[chat ${reqId}] done full_len=${fullText.length}`)
               saveUserMsg.then(() =>
                 saveMessage(sbUrl, sbKey, 'assistant', fullText || '...', { persona_id: persona.id })
                   .catch(e => console.error('[save ai msg]', e))
@@ -110,6 +124,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
           const d = JSON.parse(chatBuffer.slice(6))
           if (d.done && !savedAi) {
             savedAi = true
+            if (debug) console.log(`[chat ${reqId}] done@flush full_len=${fullText.length}`)
             saveUserMsg.then(() =>
               saveMessage(sbUrl, sbKey, 'assistant', fullText || '...', { persona_id: persona.id })
                 .catch(e => console.error('[save ai msg flush]', e))

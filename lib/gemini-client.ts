@@ -7,6 +7,11 @@ export interface GeminiMessage {
   parts: Array<{ text: string } | { inlineData: { mimeType: string; data: string } }>
 }
 
+interface StreamDebugOptions {
+  debug?: boolean
+  reqId?: string
+}
+
 function extractTextParts(parsed: unknown): string {
   const parts = (parsed as { candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }> })
     ?.candidates?.[0]?.content?.parts
@@ -20,8 +25,11 @@ function extractTextParts(parsed: unknown): string {
 export async function streamGemini(
   apiKey: string,
   systemPrompt: string,
-  messages: GeminiMessage[]
+  messages: GeminiMessage[],
+  opts: StreamDebugOptions = {}
 ): Promise<ReadableStream<Uint8Array>> {
+  const debug = opts.debug === true
+  const reqId = opts.reqId ?? 'na'
   const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:streamGenerateContent?key=${apiKey}&alt=sse`
 
   const upstream = await fetch(url, {
@@ -41,9 +49,15 @@ export async function streamGemini(
   })
 
   const encoder = new TextEncoder()
+  if (debug) {
+    console.log(`[gemini ${reqId}] upstream status=${upstream.status} ok=${upstream.ok}`)
+  }
 
   if (!upstream.ok) {
     const err = await upstream.text()
+    if (debug) {
+      console.error(`[gemini ${reqId}] upstream error body=${err.slice(0, 600)}`)
+    }
     return new ReadableStream({
       start(ctrl) {
         ctrl.enqueue(encoder.encode(`data: ${JSON.stringify({ error: err })}\n\n`))
@@ -56,6 +70,7 @@ export async function streamGemini(
   let fullText    = ''
   let doneSent    = false
   let lineBuffer  = ''         // ← 修复：跨 chunk 行缓冲
+  let eventCount  = 0
 
   const transform = new TransformStream<Uint8Array, Uint8Array>({
     transform(chunk, ctrl) {
@@ -70,6 +85,7 @@ export async function streamGemini(
         const raw = line.slice(6).trim()
         if (!raw || raw === '[DONE]') continue
         try {
+          eventCount += 1
           const parsed = JSON.parse(raw)
           const piece = extractTextParts(parsed)
           if (piece) {
@@ -78,6 +94,11 @@ export async function streamGemini(
           }
           // finishReason 检查：STOP 正常结束，MAX_TOKENS 超长，SAFETY/RECITATION 内容被过滤
           const finishReason: string = parsed?.candidates?.[0]?.finishReason ?? ''
+          if (debug && (eventCount <= 3 || finishReason)) {
+            console.log(
+              `[gemini ${reqId}] event=${eventCount} piece_len=${piece.length} finish=${finishReason || 'none'}`
+            )
+          }
           if (finishReason && !doneSent) {
             if ((finishReason === 'SAFETY' || finishReason === 'RECITATION') && !fullText) {
               // 内容被安全过滤且没有任何输出，发一个友好提示
@@ -92,6 +113,9 @@ export async function streamGemini(
             }
             doneSent = true
             ctrl.enqueue(encoder.encode(`data: ${JSON.stringify({ done: true, full: fullText })}\n\n`))
+            if (debug) {
+              console.log(`[gemini ${reqId}] done via finishReason full_len=${fullText.length}`)
+            }
           }
         } catch { /* 解析失败跳过 */ }
       }
@@ -119,6 +143,9 @@ export async function streamGemini(
           ctrl.enqueue(encoder.encode(`data: ${JSON.stringify({ text: fallbackMsg })}\n\n`))
         }
         ctrl.enqueue(encoder.encode(`data: ${JSON.stringify({ done: true, full: fullText })}\n\n`))
+        if (debug) {
+          console.log(`[gemini ${reqId}] done via flush full_len=${fullText.length} events=${eventCount}`)
+        }
       }
     },
   })
