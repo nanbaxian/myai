@@ -10,7 +10,6 @@ interface Env {
   BUCKET: R2Bucket
 
   GEMINI_API_KEY: string
-  DEBUG_GEMINI?: string
   SUPABASE_URL: string
   SUPABASE_SERVICE_KEY: string
   AI: Ai  // Workers AI binding — @cf/baai/bge-m3 向量嵌入（1024维）
@@ -47,7 +46,8 @@ export const onRequestOptions = (): Response => new Response(null, { headers: co
 
 export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   const reqId = crypto.randomUUID().slice(0, 8)
-  const debug = env.DEBUG_GEMINI === '1'
+  const debug = true
+  console.log(`[chat ${reqId}] request_start debug=${debug}`)
   let body: { message?: string; imageBase64?: string }
   try { body = await request.json() }
   catch { return errJson('请求格式错误', 400) }
@@ -141,6 +141,8 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
       'Content-Type': 'text/event-stream',
       'Cache-Control': 'no-cache',
       'X-Accel-Buffering': 'no',
+      'X-Debug-Gemini': debug ? '1' : '0',
+      'X-Req-Id': reqId,
     },
   })
 }
