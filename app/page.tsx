@@ -78,7 +78,9 @@ export default function Home() {
       const decoder    = new TextDecoder()
       let aiContent    = ''
       let started      = false
+      let finished     = false
       let lineBuffer   = ''   // BUG-2修复：跨 chunk 行缓冲
+      let streamError  = ''
 
       while (true) {
         const { done, value } = await reader.read()
@@ -109,7 +111,11 @@ export default function Home() {
                 )
               }
             }
+            if (data.error) {
+              streamError = String(data.error)
+            }
             if (data.done) {
+              finished = true
               setMessages(prev =>
                 prev.map(m => m.id === typingId
                   ? { ...m, id: 'ai-' + Date.now(), is_typing: false, content: aiContent }
@@ -120,6 +126,21 @@ export default function Home() {
             }
           } catch {}
         }
+      }
+
+      // 兜底：流结束但没有 done 事件时，避免一直卡在“正在输入”
+      if (!finished) {
+        setMessages(prev =>
+          prev.map(m => m.id === typingId
+            ? {
+                ...m,
+                is_typing: false,
+                id: 'err-' + Date.now(),
+                content: streamError ? `请求失败：${streamError}` : '暂时没有拿到回复，请再试一次。',
+              }
+            : m
+          )
+        )
       }
     } catch {
       setMessages(prev =>

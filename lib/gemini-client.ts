@@ -37,6 +37,7 @@ export async function streamGemini(
     return new ReadableStream({
       start(ctrl) {
         ctrl.enqueue(encoder.encode(`data: ${JSON.stringify({ error: err })}\n\n`))
+        ctrl.enqueue(encoder.encode(`data: ${JSON.stringify({ done: true, full: '' })}\n\n`))
         ctrl.close()
       },
     })
