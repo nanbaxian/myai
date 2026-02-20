@@ -16,18 +16,22 @@ export function buildSystemPrompt(
 ): string {
   const parts: string[] = []
 
+  parts.push(`# Current Turn Anchor\n${turnAnchor(latestUserText)}`)
   parts.push(`# Response Language\n${languageGuide(latestUserText, uiLanguage)}`)
   parts.push(`# Persona\n${persona.prompt}`)
 
   if (memory.coreMemories.length > 0) {
     const list = [...memory.coreMemories]
       .sort((a, b) => b.importance - a.importance)
+      .slice(0, 5)
       .map(m => `- ${m.fact}`)
       .join('\n')
     parts.push(`# Core Facts About User\n${list}`)
   }
 
-  const goodMatches = (memory.semanticMatches ?? []).filter(s => (s.similarity ?? 0) > 0.7)
+  const goodMatches = (memory.semanticMatches ?? [])
+    .filter(s => (s.similarity ?? 0) > 0.82)
+    .slice(0, 2)
   if (goodMatches.length > 0) {
     const list = goodMatches
       .map(s => `- ${s.summary_text} (relevance ${Math.round((s.similarity ?? 0) * 100)}%)`)
@@ -35,15 +39,17 @@ export function buildSystemPrompt(
     parts.push(`# Topic-Relevant Memory\n${list}`)
   }
 
-  if (memory.midTermSummary.length > 0) {
+  if (goodMatches.length > 0 && memory.midTermSummary.length > 0) {
     const list = memory.midTermSummary
+      .slice(0, 1)
       .map(s => formatMid(s))
       .join('\n\n')
     parts.push(`# Recent Impressions\n${list}`)
   }
 
-  if (memory.longTermFragments.length > 0) {
+  if (goodMatches.length > 0 && memory.longTermFragments.length > 0) {
     const list = memory.longTermFragments
+      .slice(0, 1)
       .flatMap(s => {
         const facts = Array.isArray(s.key_facts) ? s.key_facts : []
         return facts.length > 0
@@ -57,6 +63,24 @@ export function buildSystemPrompt(
   parts.push(`# Style Guide\n${styleGuide(persona.reply_style)}`)
 
   return parts.join('\n\n---\n\n')
+}
+
+function turnAnchor(latestUserText: string): string {
+  const latest = (latestUserText || '').trim()
+  if (!latest) {
+    return [
+      '- Start by addressing the latest user message directly.',
+      '- Do not output generic greetings or repeated self-introduction.',
+      '- If context is unclear, ask one short clarifying question.',
+    ].join('\n')
+  }
+
+  return [
+    '- First sentence must directly respond to the user\'s latest message.',
+    '- Never ignore the latest message.',
+    '- Do not restart the conversation or repeat fixed intro lines.',
+    `- Latest user message: """${latest.slice(0, 600)}"""`,
+  ].join('\n')
 }
 
 function languageGuide(userText: string, uiLanguage: ReplyLanguage): string {
@@ -115,6 +139,7 @@ function styleGuide(style: string): string {
 - For medium-term memory, use uncertain phrasing like "I remember" or "I think"
 - For long-term memory, use even fuzzier phrasing like "maybe"
 - Avoid bullet-point style in final user-facing replies
+- Never repeat self-introduction unless user explicitly asks who you are
 - If user sends an image, describe it naturally and tie it to the conversation`
   const tips: Record<string, string> = {
     short: '- Keep it brief (1-3 sentences) and conversational.',
@@ -132,10 +157,13 @@ export function buildMessageHistory(
   userText: string,
   imageBase64?: string,
 ): Array<{ role: 'user' | 'model'; parts: Array<{ text: string } | { inlineData: { mimeType: string; data: string } }> }> {
-  const history = memory.shortTermMessages.map((msg: DbMessage) => ({
-    role: (msg.role === 'user' ? 'user' : 'model') as 'user' | 'model',
-    parts: [{ text: msg.content || '(image)' }],
-  }))
+  const history = memory.shortTermMessages
+    .filter((msg: DbMessage) => Boolean((msg.content || '').trim()))
+    .slice(-8)
+    .map((msg: DbMessage) => ({
+      role: (msg.role === 'user' ? 'user' : 'model') as 'user' | 'model',
+      parts: [{ text: msg.content || '(image)' }],
+    }))
 
   const parts: Array<{ text: string } | { inlineData: { mimeType: string; data: string } }> = []
   if (imageBase64) {

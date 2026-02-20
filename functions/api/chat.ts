@@ -52,15 +52,20 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   const startedAt = Date.now()
   const debug = true
   console.log(`[chat ${reqId}] request_start debug=${debug}`)
-  let body: { message?: string; imageBase64?: string; replyLanguage?: ReplyLanguage }
+  let body: { message?: string; imageBase64?: string; imageUrl?: string; replyLanguage?: ReplyLanguage }
   try { body = await request.json() }
   catch { return errJson('请求格式错误', 400) }
 
-  const { message = '', imageBase64 } = body
+  const { message = '', imageUrl } = body
+  let { imageBase64 } = body
   const replyLanguage: ReplyLanguage =
     body.replyLanguage === 'en' || body.replyLanguage === 'zh' || body.replyLanguage === 'auto'
       ? body.replyLanguage
       : 'auto'
+  if (!imageBase64 && imageUrl) {
+    const r2 = await r2ImageUrlToBase64(env, imageUrl)
+    if (r2?.base64) imageBase64 = r2.base64
+  }
   if (!message && !imageBase64) return errJson('消息不能为空', 400)
   if (debug) {
     console.log(
