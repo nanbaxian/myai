@@ -4,12 +4,15 @@
 import { loadMemoryContext, saveMessage } from '../../lib/memory-engine'
 import { buildSystemPrompt, buildMessageHistory } from '../../lib/context-builder'
 import { streamGemini } from '../../lib/gemini-client'
-import type { Persona } from '../../types/index'
+import type { Persona, ReplyLanguage } from '../../types/index'
 
 interface Env {
   BUCKET: R2Bucket
 
   DEEPINFRA_API_KEY: string
+  DEEPINFRA_MODEL?: string
+  DEEPINFRA_MAX_TOKENS?: string
+  DEEPINFRA_COALESCE_CHARS?: string
   SUPABASE_URL: string
   SUPABASE_SERVICE_KEY: string
   AI: Ai  // Workers AI binding — @cf/baai/bge-m3 向量嵌入（1024维）
@@ -46,16 +49,23 @@ export const onRequestOptions = (): Response => new Response(null, { headers: co
 
 export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   const reqId = crypto.randomUUID().slice(0, 8)
+  const startedAt = Date.now()
   const debug = true
   console.log(`[chat ${reqId}] request_start debug=${debug}`)
-  let body: { message?: string; imageBase64?: string }
+  let body: { message?: string; imageBase64?: string; replyLanguage?: ReplyLanguage }
   try { body = await request.json() }
   catch { return errJson('请求格式错误', 400) }
 
   const { message = '', imageBase64 } = body
+  const replyLanguage: ReplyLanguage =
+    body.replyLanguage === 'en' || body.replyLanguage === 'zh' || body.replyLanguage === 'auto'
+      ? body.replyLanguage
+      : 'auto'
   if (!message && !imageBase64) return errJson('消息不能为空', 400)
   if (debug) {
-    console.log(`[chat ${reqId}] in message_len=${message.length} has_image=${Boolean(imageBase64)}`)
+    console.log(
+      `[chat ${reqId}] in message_len=${message.length} has_image=${Boolean(imageBase64)} lang=${replyLanguage}`
+    )
   }
 
   const sbUrl = env.SUPABASE_URL
@@ -69,7 +79,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   const memory = await loadMemoryContext(sbUrl, sbKey, message || undefined, env.DEEPINFRA_API_KEY, persona.id, env.AI)
 
   // ③ 构建 prompt 和消息历史
-  const systemPrompt = buildSystemPrompt(persona, memory)
+  const systemPrompt = buildSystemPrompt(persona, memory, message || '', replyLanguage)
   const messages     = buildMessageHistory(memory, message, imageBase64)
   if (debug) {
     console.log(
@@ -85,7 +95,23 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   ).catch(e => console.error('[save user msg]', e))
 
   // ⑤ 调用 Gemini 流式
-  const geminiStream = await streamGemini(env.DEEPINFRA_API_KEY, systemPrompt, messages, { debug, reqId })
+  const maxOutputTokens = Number.parseInt(env.DEEPINFRA_MAX_TOKENS || '', 10)
+  const coalesceChars = Number.parseInt(env.DEEPINFRA_COALESCE_CHARS || '', 10)
+  if (debug) {
+    console.log(
+      `[chat ${reqId}] deepinfra_config model=${env.DEEPINFRA_MODEL || 'default'} ` +
+      `max_tokens=${Number.isFinite(maxOutputTokens) ? maxOutputTokens : 'default'} ` +
+      `coalesce=${Number.isFinite(coalesceChars) ? coalesceChars : 'default'} ` +
+      `prep_ms=${Date.now() - startedAt}`
+    )
+  }
+  const geminiStream = await streamGemini(env.DEEPINFRA_API_KEY, systemPrompt, messages, {
+    debug,
+    reqId,
+    model: env.DEEPINFRA_MODEL,
+    maxOutputTokens: Number.isFinite(maxOutputTokens) ? maxOutputTokens : undefined,
+    coalesceChars: Number.isFinite(coalesceChars) ? coalesceChars : undefined,
+  })
 
   // ⑥ 拦截流 → 捕获完整回复后保存 AI 消息
   let fullText  = ''

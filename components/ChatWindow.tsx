@@ -4,17 +4,25 @@
 // P1 版本：接 InputArea 的 lastAiMessage prop，支持 TTS 自动播报
 
 import { useRef, useEffect, useState } from 'react'
-import { Persona, Message } from '@/types'
+import { Persona, Message, ReplyLanguage } from '@/types'
 import MessageBubble from './MessageBubble'
 import InputArea from './InputArea'
 
 interface Props {
   persona: Persona | null
   messages: Message[]
-  onSendMessage: (text: string, imageBase64?: string, imagePreviewUrl?: string) => void
+  replyLanguage: ReplyLanguage
+  onReplyLanguageChange: (lang: ReplyLanguage) => void
+  onSendMessage: (text: string, imageBase64?: string, imagePreviewUrl?: string, replyLanguage?: ReplyLanguage) => void
 }
 
-export default function ChatWindow({ persona, messages, onSendMessage }: Props) {
+export default function ChatWindow({
+  persona,
+  messages,
+  replyLanguage,
+  onReplyLanguageChange,
+  onSendMessage,
+}: Props) {
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
   // 追踪最新完成的 AI 消息，用于触发 TTS
@@ -82,6 +90,8 @@ export default function ChatWindow({ persona, messages, onSendMessage }: Props) 
         onSend={onSendMessage}
         disabled={isStreaming}
         persona={persona}
+        replyLanguage={replyLanguage}
+        onReplyLanguageChange={onReplyLanguageChange}
         lastAiMessage={lastCompletedAiMsg}
       />
     </main>

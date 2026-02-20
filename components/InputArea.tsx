@@ -4,13 +4,15 @@
 // P1 完整版：文字 + 语音录制(Whisper) + 图片上传 + TTS 播放
 
 import { useState, useRef, useCallback, useEffect } from 'react'
-import { Persona } from '@/types'
+import { Persona, ReplyLanguage } from '@/types'
 import { supabase } from '@/lib/supabase-browser'
 
 interface Props {
-  onSend: (text: string, imageUrl?: string, imagePreviewUrl?: string) => void
+  onSend: (text: string, imageUrl?: string, imagePreviewUrl?: string, replyLanguage?: ReplyLanguage) => void
   disabled?: boolean
   persona: Persona | null
+  replyLanguage: ReplyLanguage
+  onReplyLanguageChange: (lang: ReplyLanguage) => void
   // P1新增：AI回复完成后触发TTS
   lastAiMessage?: string
 }
@@ -32,7 +34,14 @@ async function blobToFile(blob: Blob, filename: string): Promise<File> {
   return new File([blob], filename, { type: blob.type || 'application/octet-stream' })
 }
 
-export default function InputArea({ onSend, disabled, persona, lastAiMessage }: Props) {
+export default function InputArea({
+  onSend,
+  disabled,
+  persona,
+  replyLanguage,
+  onReplyLanguageChange,
+  lastAiMessage,
+}: Props) {
   const [text, setText]               = useState('')
   const [isRecording, setIsRecording] = useState(false)
   const [isTranscribing, setIsTranscribing] = useState(false)
@@ -246,9 +255,9 @@ export default function InputArea({ onSend, disabled, persona, lastAiMessage }: 
           return
         }
         const up = await uploadFileToR2(pendingImageFile, token)
-        onSend(trimmed, up.url, pendingImage?.preview)
+        onSend(trimmed, up.url, pendingImage?.preview, replyLanguage)
       } else {
-        onSend(trimmed)
+        onSend(trimmed, undefined, undefined, replyLanguage)
       }
     })()
     setText('')
@@ -312,6 +321,17 @@ export default function InputArea({ onSend, disabled, persona, lastAiMessage }: 
         )}
 
         <div className="flex-1" />
+        <select
+          value={replyLanguage}
+          onChange={e => onReplyLanguageChange(e.target.value as ReplyLanguage)}
+          className="h-8 rounded-lg border border-paper-deep bg-white px-2 text-[12px] text-ink outline-none focus:border-accent-soft"
+          title="Reply language"
+          disabled={disabled}
+        >
+          <option value="auto">Auto</option>
+          <option value="zh">中文</option>
+          <option value="en">English</option>
+        </select>
         <span className="text-[11px] text-ink-mute hidden sm:block">
           {persona?.name ? `${persona.name} · ` : ''}Gemini Flash 1.5
         </span>

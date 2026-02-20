@@ -8,7 +8,7 @@ import ChatWindow       from '@/components/ChatWindow'
 import PersonaModal     from '@/components/PersonaModal'
 import MemoryManager    from '@/components/MemoryManager'
 import PersonaSwitcher  from '@/components/PersonaSwitcher'
-import { Persona, Message } from '@/types'
+import { Persona, Message, ReplyLanguage } from '@/types'
 
 type Modal = 'persona' | 'memory' | 'switcher' | null
 
@@ -18,6 +18,7 @@ export default function Home() {
   const [modal,    setModal]    = useState<Modal>(null)
   const [loading,  setLoading]  = useState(true)
   const [sidebarRefreshKey, setSidebarRefreshKey] = useState(0)
+  const [replyLanguage, setReplyLanguage] = useState<ReplyLanguage>('auto')
 
   // 启动时加载活跃人设
   useEffect(() => {
@@ -40,7 +41,8 @@ export default function Home() {
   const handleSendMessage = async (
     text: string,
     imageUrl?: string,
-    imagePreviewUrl?: string
+    imagePreviewUrl?: string,
+    lang: ReplyLanguage = replyLanguage,
   ) => {
     if (!text && !imageUrl) return
 
@@ -69,7 +71,7 @@ export default function Home() {
       const res = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: text, imageUrl }),
+        body: JSON.stringify({ message: text, imageUrl, replyLanguage: lang }),
       })
 
       if (!res.ok) throw new Error('API error')
@@ -174,6 +176,8 @@ export default function Home() {
       <ChatWindow
         persona={persona}
         messages={messages}
+        replyLanguage={replyLanguage}
+        onReplyLanguageChange={setReplyLanguage}
         onSendMessage={handleSendMessage}
       />
 

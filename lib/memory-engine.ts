@@ -169,7 +169,7 @@ export async function loadMemoryContext(
     select: 'id,role,content,content_type,image_url,created_at',
     'created_at': `gte.${shortCutoff}`,
     order: 'created_at.asc',
-    limit: '20',
+    limit: '10',
   }
   if (personaId) shortMsgParams['persona_id'] = `eq.${personaId}`
 

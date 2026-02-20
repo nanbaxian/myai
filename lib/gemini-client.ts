@@ -9,6 +9,9 @@ export interface GeminiMessage {
 interface StreamDebugOptions {
   debug?: boolean
   reqId?: string
+  model?: string
+  maxOutputTokens?: number
+  coalesceChars?: number
 }
 
 interface OpenAIContentTextPart {
@@ -81,14 +84,29 @@ export async function streamGemini(
 ): Promise<ReadableStream<Uint8Array>> {
   const debug = opts.debug === true
   const reqId = opts.reqId ?? 'na'
-  const model = 'meta-llama/Llama-3.2-3B-Instruct'
+  const startedAt = Date.now()
+  const model = opts.model ?? 'meta-llama/Llama-3.2-3B-Instruct'
+  const maxOutputTokens = Math.max(64, Math.min(1024, opts.maxOutputTokens ?? 300))
+  const coalesceChars = Math.max(4, Math.min(64, opts.coalesceChars ?? 12))
   const url = 'https://api.deepinfra.com/v1/openai/chat/completions'
   const payload = {
     model,
     stream: true,
-    temperature: 0.9,
-    max_tokens: 600,
+    temperature: 0.7,
+    max_tokens: maxOutputTokens,
     messages: mapGeminiToOpenAI(messages, systemPrompt),
+  }
+  if (debug) {
+    const inputChars = messages
+      .flatMap(m => m.parts)
+      .reduce((n, p) => n + ('text' in p && typeof p.text === 'string' ? p.text.length : 0), 0)
+    const imageParts = messages
+      .flatMap(m => m.parts)
+      .filter(p => 'inlineData' in p && Boolean(p.inlineData?.data)).length
+    console.log(
+      `[deepinfra ${reqId}] start model=${model} max_tokens=${maxOutputTokens} coalesce=${coalesceChars} ` +
+      `msg_count=${messages.length} input_chars=${inputChars} image_parts=${imageParts}`
+    )
   }
 
   const upstream = await fetch(url, {
@@ -102,7 +120,10 @@ export async function streamGemini(
 
   const encoder = new TextEncoder()
   if (debug) {
-    console.log(`[deepinfra ${reqId}] upstream status=${upstream.status} ok=${upstream.ok}`)
+    console.log(
+      `[deepinfra ${reqId}] upstream status=${upstream.status} ok=${upstream.ok} ` +
+      `fetch_ms=${Date.now() - startedAt}`
+    )
   }
 
   if (!upstream.ok) {
@@ -123,6 +144,22 @@ export async function streamGemini(
   let doneSent = false
   let lineBuffer = ''
   let eventCount = 0
+  let parseErrorCount = 0
+  let emitCount = 0
+  let firstTokenAt = 0
+  let pendingText = ''
+  const emitText = (ctrl: TransformStreamDefaultController<Uint8Array>, force = false) => {
+    if (!pendingText) return
+    const shouldFlushByPunc = /[，。！？,.!?;；:：\n]$/.test(pendingText)
+    if (force || pendingText.length >= coalesceChars || shouldFlushByPunc) {
+      emitCount += 1
+      if (debug && (emitCount <= 3 || force)) {
+        console.log(`[deepinfra ${reqId}] emit #${emitCount} chars=${pendingText.length} force=${force}`)
+      }
+      ctrl.enqueue(encoder.encode(`data: ${JSON.stringify({ text: pendingText })}\n\n`))
+      pendingText = ''
+    }
+  }
 
   const transform = new TransformStream<Uint8Array, Uint8Array>({
     transform(chunk, ctrl) {
@@ -141,8 +178,9 @@ export async function streamGemini(
             if (!fullText) {
               const fallbackMsg = 'I could not generate a response. Please try again.'
               fullText = fallbackMsg
-              ctrl.enqueue(encoder.encode(`data: ${JSON.stringify({ text: fallbackMsg })}\n\n`))
+              pendingText += fallbackMsg
             }
+            emitText(ctrl, true)
             ctrl.enqueue(encoder.encode(`data: ${JSON.stringify({ done: true, full: fullText })}\n\n`))
           }
           continue
@@ -153,8 +191,15 @@ export async function streamGemini(
           const parsed = JSON.parse(raw)
           const piece = extractDeltaText(parsed)
           if (piece) {
+            if (!firstTokenAt) {
+              firstTokenAt = Date.now()
+              if (debug) {
+                console.log(`[deepinfra ${reqId}] first_token_ms=${firstTokenAt - startedAt}`)
+              }
+            }
             fullText += piece
-            ctrl.enqueue(encoder.encode(`data: ${JSON.stringify({ text: piece })}\n\n`))
+            pendingText += piece
+            emitText(ctrl)
           }
 
           const finishReason =
@@ -169,12 +214,13 @@ export async function streamGemini(
             if (!fullText) {
               const fallbackMsg = 'I could not generate a response. Please try again.'
               fullText = fallbackMsg
-              ctrl.enqueue(encoder.encode(`data: ${JSON.stringify({ text: fallbackMsg })}\n\n`))
+              pendingText += fallbackMsg
             }
+            emitText(ctrl, true)
             ctrl.enqueue(encoder.encode(`data: ${JSON.stringify({ done: true, full: fullText })}\n\n`))
           }
         } catch {
-          // Skip malformed event
+          parseErrorCount += 1
         }
       }
     },
@@ -183,11 +229,15 @@ export async function streamGemini(
         if (!fullText) {
           const fallbackMsg = 'I could not generate a response. Please try again.'
           fullText = fallbackMsg
-          ctrl.enqueue(encoder.encode(`data: ${JSON.stringify({ text: fallbackMsg })}\n\n`))
+          pendingText += fallbackMsg
         }
+        emitText(ctrl, true)
         ctrl.enqueue(encoder.encode(`data: ${JSON.stringify({ done: true, full: fullText })}\n\n`))
         if (debug) {
-          console.log(`[deepinfra ${reqId}] done via flush full_len=${fullText.length} events=${eventCount}`)
+          console.log(
+            `[deepinfra ${reqId}] done via flush full_len=${fullText.length} events=${eventCount} ` +
+            `emits=${emitCount} parse_errors=${parseErrorCount} total_ms=${Date.now() - startedAt}`
+          )
         }
       }
     },

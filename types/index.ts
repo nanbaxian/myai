@@ -13,6 +13,8 @@ export interface Persona {
   voice_id?: string
 }
 
+export type ReplyLanguage = 'auto' | 'zh' | 'en'
+
 // ================================================
 // 消息（前端显示用，含 UI 专有字段）
 // ================================================
