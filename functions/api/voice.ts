@@ -72,9 +72,10 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   const plan = await getUserPlan(env, userId)
   const key = quotaKey(userId)
 
-    const ct = request.headers.get('content-type') || ''
+  const ct = request.headers.get('content-type') || ''
   let audioArrayBuffer: ArrayBuffer | null = null
   let durationSeconds = 0
+  let mimeType = 'audio/webm'
 
   if (ct.includes('application/json')) {
     const body = await request.json().catch(() => null as any)
@@ -87,6 +88,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     const obj = await env.BUCKET.get(mm[1])
     if (!obj) return jsonError('音频不存在', 404)
     audioArrayBuffer = await obj.arrayBuffer()
+    mimeType = obj.httpMetadata?.contentType || mimeType
   } else {
     let formData: FormData
     try {
@@ -99,11 +101,8 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     const durationMs = Number(request.headers.get('x-audio-duration-ms') || 0)
     durationSeconds = Math.ceil(Math.max(1, durationMs) / 1000)
     audioArrayBuffer = await audioFile.arrayBuffer()
+    mimeType = audioFile.type || mimeType
   }
-
-
-  const audioFile = formData.get('audio') as File | null
-  if (!audioFile) return jsonError('未收到音频文件', 400)
 
   // Free 配额检查
   let remaining = 0
@@ -115,15 +114,12 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     }
   }
 
-  // 时长（ms）：优先前端上报；否则按 30s 估算
-  const durMsHeader = request.headers.get('x-audio-duration-ms')
-  const durMs = durMsHeader ? Number(durMsHeader) : NaN
-  const audioSeconds = Number.isFinite(durMs) && durMs > 0
-    ? Math.min(600, Math.max(1, Math.ceil(durMs / 1000))) // 单次最多计 10 分钟
+  // 计费时长：优先使用前端上报/JSON 里的 durationSeconds，否则按 30s 估算
+  const audioSeconds = Number.isFinite(durationSeconds) && durationSeconds > 0
+    ? Math.min(600, Math.max(1, Math.ceil(durationSeconds))) // 单次最多计 10 分钟
     : 30
 
   // Deepgram ASR
-  const mimeType = audioFile.type || 'audio/webm'
   const dgUrl = new URL('https://api.deepgram.com/v1/listen')
   dgUrl.searchParams.set('model', 'nova-2')
   dgUrl.searchParams.set('smart_format', 'true')
@@ -137,8 +133,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
       Authorization: `Token ${env.DEEPGRAM_API_KEY}`,
       'Content-Type': mimeType,
     },
-    body: audioArrayBuffer as any
-    }),
+    body: audioArrayBuffer as any,
   })
 
   if (!dgRes.ok) {
