@@ -9,7 +9,7 @@
 import { compressMemories } from '../lib/memory-engine'
 
 interface Env {
-  GEMINI_API_KEY: string
+  DEEPINFRA_API_KEY: string
   SUPABASE_URL: string
   SUPABASE_SERVICE_KEY: string
   AI: Ai  // Workers AI binding — @cf/baai/bge-m3 向量嵌入（1024维）
@@ -23,7 +23,7 @@ export default {
       await compressMemories(
         env.SUPABASE_URL,
         env.SUPABASE_SERVICE_KEY,
-        env.GEMINI_API_KEY,
+        env.DEEPINFRA_API_KEY,
         env.AI,
       )
       console.log('[cron] Done.')
@@ -38,7 +38,7 @@ export default {
       return new Response('POST only', { status: 405 })
     }
     try {
-      await compressMemories(env.SUPABASE_URL, env.SUPABASE_SERVICE_KEY, env.GEMINI_API_KEY, env.AI)
+      await compressMemories(env.SUPABASE_URL, env.SUPABASE_SERVICE_KEY, env.DEEPINFRA_API_KEY, env.AI)
       return new Response(JSON.stringify({ success: true }), {
         headers: { 'Content-Type': 'application/json' },
       })

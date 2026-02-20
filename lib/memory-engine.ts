@@ -348,18 +348,23 @@ async function extractCoreMemories(db: SupabaseRest, cutoff: string, apiKey: str
 // 工具
 // ================================================
 async function callGemini(apiKey: string, prompt: string): Promise<string> {
-  const url = `https://generativelanguage.googleapis.com/v1/models/gemini-2.5-flash:generateContent?key=${apiKey}`
+  const url = 'https://api.deepinfra.com/v1/openai/chat/completions'
   const res = await fetch(url, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${apiKey}`,
+    },
     body: JSON.stringify({
-      contents: [{ role: 'user', parts: [{ text: prompt }] }],
-      generationConfig: { maxOutputTokens: 800, temperature: 0.2 },
+      model: 'meta-llama/Llama-3.2-3B-Instruct',
+      temperature: 0.2,
+      max_tokens: 800,
+      messages: [{ role: 'user', content: prompt }],
     }),
   })
-  if (!res.ok) throw new Error(`Gemini ${res.status}`)
-  const data = await res.json() as { candidates: Array<{ content: { parts: Array<{ text: string }> } }> }
-  return data?.candidates?.[0]?.content?.parts?.[0]?.text ?? ''
+  if (!res.ok) throw new Error(`DeepInfra ${res.status}: ${await res.text()}`)
+  const data = await res.json() as { choices?: Array<{ message?: { content?: string } }> }
+  return data?.choices?.[0]?.message?.content ?? ''
 }
 
 function parseCompression(text: string) {

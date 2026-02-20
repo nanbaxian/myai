@@ -15,4 +15,4 @@ crons = ["0 2 * * *"]
 binding = "AI"
 
 # 环境变量在 CF Dashboard 里配置（和 Pages 共用同一套值）
-# GEMINI_API_KEY、SUPABASE_URL、SUPABASE_SERVICE_KEY
+# DEEPINFRA_API_KEY、SUPABASE_URL、SUPABASE_SERVICE_KEY

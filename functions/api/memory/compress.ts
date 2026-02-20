@@ -7,7 +7,7 @@
 import { compressMemories } from '../../../lib/memory-engine'
 
 interface Env {
-  GEMINI_API_KEY: string
+  DEEPINFRA_API_KEY: string
   SUPABASE_URL: string
   SUPABASE_SERVICE_KEY: string
   CRON_SECRET: string
@@ -47,11 +47,10 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   if (!isAuthorized) return json({ error: 'Unauthorized' }, 401)
 
   try {
-    await compressMemories(env.SUPABASE_URL, env.SUPABASE_SERVICE_KEY, env.GEMINI_API_KEY, env.AI)
+    await compressMemories(env.SUPABASE_URL, env.SUPABASE_SERVICE_KEY, env.DEEPINFRA_API_KEY, env.AI)
     return json({ success: true, timestamp: new Date().toISOString() })
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err)
     return json({ error: msg }, 500)
   }
 }
-

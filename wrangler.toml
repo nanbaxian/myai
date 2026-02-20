@@ -23,7 +23,7 @@ id = "b37aa1043f544632a002618ec4270bc2"
 binding = "BUCKET"
 bucket_name = "myai"
 # 环境变量在 CF Dashboard > Pages > Settings > Environment variables 配置：
-# GEMINI_API_KEY       = "..."
+# DEEPINFRA_API_KEY    = "..."
 # DEEPGRAM_API_KEY     = "..."   # Free ASR
 # GOOGLE_TTS_API_KEY   = "..."   # Free TTS
 # ELEVENLABS_API_KEY   = "..."   # Pro TTS

@@ -2,7 +2,7 @@
 # 必须加入 .gitignore，绝对不要提交！
 # 生产环境变量在 Cloudflare Dashboard 里设置
 
-GEMINI_API_KEY=your-gemini-api-key-here
+DEEPINFRA_API_KEY=your-deepinfra-api-key-here
 DEEPGRAM_API_KEY=your-deepgram-api-key-here
 GOOGLE_TTS_API_KEY=your-google-tts-api-key-here
 ELEVENLABS_API_KEY=your-elevenlabs-api-key-here

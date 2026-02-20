@@ -9,7 +9,7 @@ import type { Persona } from '../../types/index'
 interface Env {
   BUCKET: R2Bucket
 
-  GEMINI_API_KEY: string
+  DEEPINFRA_API_KEY: string
   SUPABASE_URL: string
   SUPABASE_SERVICE_KEY: string
   AI: Ai  // Workers AI binding — @cf/baai/bge-m3 向量嵌入（1024维）
@@ -66,7 +66,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   if (!persona) return errJson('未找到人设配置', 500)
 
   // ② 加载记忆（传入当前消息做语义搜索，优先用 Workers AI binding 生成向量）
-  const memory = await loadMemoryContext(sbUrl, sbKey, message || undefined, env.GEMINI_API_KEY, persona.id, env.AI)
+  const memory = await loadMemoryContext(sbUrl, sbKey, message || undefined, env.DEEPINFRA_API_KEY, persona.id, env.AI)
 
   // ③ 构建 prompt 和消息历史
   const systemPrompt = buildSystemPrompt(persona, memory)
@@ -85,7 +85,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   ).catch(e => console.error('[save user msg]', e))
 
   // ⑤ 调用 Gemini 流式
-  const geminiStream = await streamGemini(env.GEMINI_API_KEY, systemPrompt, messages, { debug, reqId })
+  const geminiStream = await streamGemini(env.DEEPINFRA_API_KEY, systemPrompt, messages, { debug, reqId })
 
   // ⑥ 拦截流 → 捕获完整回复后保存 AI 消息
   let fullText  = ''
