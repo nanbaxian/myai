@@ -35,11 +35,23 @@ export async function verifySupabaseJwt(req: Request, env: any): Promise<AuthUse
   const kid = header.kid
   if (!kid) throw new Error('JWT missing kid')
 
+  const rawSupabaseUrl = String(env.SUPABASE_URL || '').trim()
+  if (!rawSupabaseUrl) throw new Error('Missing SUPABASE_URL')
+  const supabaseUrl = rawSupabaseUrl.replace(/\/+$/, '')
+  const certsUrl = /\/auth\/v1$/i.test(supabaseUrl)
+    ? `${supabaseUrl}/certs`
+    : `${supabaseUrl}/auth/v1/certs`
+
   // Fetch JWKS (cached by Cloudflare)
-  const jwksRes = await fetch(`${env.SUPABASE_URL}/auth/v1/certs`, {
-    cf: { cacheTtl: 3600, cacheEverything: true } as any,
-  })
-  if (!jwksRes.ok) throw new Error('Failed to fetch JWKS')
+  let jwksRes: Response
+  try {
+    jwksRes = await fetch(certsUrl, {
+      cf: { cacheTtl: 3600, cacheEverything: true } as any,
+    })
+  } catch (e: any) {
+    throw new Error(`Failed to fetch JWKS: ${e?.message || 'network error'} (${certsUrl})`)
+  }
+  if (!jwksRes.ok) throw new Error(`Failed to fetch JWKS: ${jwksRes.status} (${certsUrl})`)
   const jwks = await jwksRes.json() as any
   const jwk = (jwks.keys || []).find((k: any) => k.kid === kid)
   if (!jwk) throw new Error('No matching JWK')
