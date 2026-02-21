@@ -31,6 +31,21 @@ interface OpenAIMessage {
   content: string | OpenAIContentPart[]
 }
 
+interface GooglePartText {
+  text: string
+}
+
+interface GooglePartInlineData {
+  inlineData: { mimeType: string; data: string }
+}
+
+type GooglePart = GooglePartText | GooglePartInlineData
+
+interface GoogleContent {
+  role: 'user' | 'model'
+  parts: GooglePart[]
+}
+
 function mapGeminiToOpenAI(messages: GeminiMessage[], systemPrompt: string): OpenAIMessage[] {
   const mapped: OpenAIMessage[] = [{ role: 'system', content: systemPrompt }]
   for (const m of messages) {
@@ -61,6 +76,21 @@ function mapGeminiToOpenAI(messages: GeminiMessage[], systemPrompt: string): Ope
   return mapped
 }
 
+function mapGeminiToGoogleContents(messages: GeminiMessage[]): GoogleContent[] {
+  return messages.map(m => ({
+    role: m.role,
+    parts: m.parts.map(part => {
+      if ('text' in part) return { text: part.text } as GooglePartText
+      return {
+        inlineData: {
+          mimeType: part.inlineData.mimeType || 'image/jpeg',
+          data: part.inlineData.data,
+        },
+      } as GooglePartInlineData
+    }),
+  }))
+}
+
 function extractDeltaText(parsed: unknown): string {
   const delta = (parsed as { choices?: Array<{ delta?: { content?: unknown } }> })?.choices?.[0]?.delta?.content
   if (typeof delta === 'string') return delta
@@ -72,6 +102,15 @@ function extractDeltaText(parsed: unknown): string {
       const type = (p as { type?: string }).type
       return type === 'text' && typeof text === 'string' ? text : ''
     })
+    .filter(Boolean)
+    .join('')
+}
+
+function extractGeminiChunkText(parsed: unknown): string {
+  const candidates = (parsed as { candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }> }).candidates
+  if (!Array.isArray(candidates) || !candidates[0]?.content?.parts) return ''
+  return candidates[0].content.parts
+    .map(p => (typeof p?.text === 'string' ? p.text : ''))
     .filter(Boolean)
     .join('')
 }
@@ -239,6 +278,133 @@ export async function streamGemini(
             `emits=${emitCount} parse_errors=${parseErrorCount} total_ms=${Date.now() - startedAt}`
           )
         }
+      }
+    },
+  })
+
+  return upstream.body!.pipeThrough(transform)
+}
+
+export async function streamGeminiFlashLite(
+  apiKey: string,
+  systemPrompt: string,
+  messages: GeminiMessage[],
+  opts: StreamDebugOptions = {}
+): Promise<ReadableStream<Uint8Array>> {
+  const debug = opts.debug === true
+  const reqId = opts.reqId ?? 'na'
+  const startedAt = Date.now()
+  const model = opts.model ?? 'gemini-2.5-flash-lite'
+  const maxOutputTokens = Math.max(64, Math.min(4096, opts.maxOutputTokens ?? 512))
+  const coalesceChars = Math.max(4, Math.min(64, opts.coalesceChars ?? 12))
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:streamGenerateContent?alt=sse&key=${encodeURIComponent(apiKey)}`
+
+  const payload = {
+    system_instruction: {
+      parts: [{ text: systemPrompt }],
+    },
+    contents: mapGeminiToGoogleContents(messages),
+    generationConfig: {
+      temperature: 0.35,
+      maxOutputTokens,
+    },
+  }
+
+  if (debug) {
+    const inputChars = messages
+      .flatMap(m => m.parts)
+      .reduce((n, p) => n + ('text' in p && typeof p.text === 'string' ? p.text.length : 0), 0)
+    const imageParts = messages
+      .flatMap(m => m.parts)
+      .filter(p => 'inlineData' in p && Boolean(p.inlineData?.data)).length
+    console.log(
+      `[gemini ${reqId}] start model=${model} max_tokens=${maxOutputTokens} coalesce=${coalesceChars} ` +
+      `msg_count=${messages.length} input_chars=${inputChars} image_parts=${imageParts}`
+    )
+  }
+
+  const upstream = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  })
+
+  const encoder = new TextEncoder()
+  if (debug) {
+    console.log(
+      `[gemini ${reqId}] upstream status=${upstream.status} ok=${upstream.ok} ` +
+      `fetch_ms=${Date.now() - startedAt}`
+    )
+  }
+
+  if (!upstream.ok) {
+    const err = await upstream.text()
+    if (debug) console.error(`[gemini ${reqId}] upstream error body=${err.slice(0, 600)}`)
+    return new ReadableStream({
+      start(ctrl) {
+        ctrl.enqueue(encoder.encode(`data: ${JSON.stringify({ error: err })}\n\n`))
+        ctrl.enqueue(encoder.encode(`data: ${JSON.stringify({ done: true, full: '' })}\n\n`))
+        ctrl.close()
+      },
+    })
+  }
+
+  let fullText = ''
+  let doneSent = false
+  let lineBuffer = ''
+  let pendingText = ''
+  const emitText = (ctrl: TransformStreamDefaultController<Uint8Array>, force = false) => {
+    if (!pendingText) return
+    const shouldFlushByPunc = /[，。！？,.!?;；:：\n]$/.test(pendingText)
+    if (force || pendingText.length >= coalesceChars || shouldFlushByPunc) {
+      ctrl.enqueue(encoder.encode(`data: ${JSON.stringify({ text: pendingText })}\n\n`))
+      pendingText = ''
+    }
+  }
+
+  const transform = new TransformStream<Uint8Array, Uint8Array>({
+    transform(chunk, ctrl) {
+      lineBuffer += new TextDecoder().decode(chunk)
+      const lines = lineBuffer.split('\n')
+      lineBuffer = lines.pop() ?? ''
+
+      for (const line of lines) {
+        if (!line.startsWith('data: ')) continue
+        const raw = line.slice(6).trim()
+        if (!raw) continue
+        if (raw === '[DONE]') {
+          if (!doneSent) {
+            doneSent = true
+            emitText(ctrl, true)
+            ctrl.enqueue(encoder.encode(`data: ${JSON.stringify({ done: true, full: fullText })}\n\n`))
+          }
+          continue
+        }
+
+        try {
+          const parsed = JSON.parse(raw)
+          const piece = extractGeminiChunkText(parsed)
+          if (piece) {
+            fullText += piece
+            pendingText += piece
+            emitText(ctrl)
+          }
+          const finishReason =
+            (parsed as { candidates?: Array<{ finishReason?: string }> })?.candidates?.[0]?.finishReason ?? ''
+          if (finishReason && !doneSent) {
+            doneSent = true
+            emitText(ctrl, true)
+            ctrl.enqueue(encoder.encode(`data: ${JSON.stringify({ done: true, full: fullText })}\n\n`))
+          }
+        } catch {
+          // Ignore broken chunk.
+        }
+      }
+    },
+    flush(ctrl) {
+      if (!doneSent) {
+        emitText(ctrl, true)
+        ctrl.enqueue(encoder.encode(`data: ${JSON.stringify({ done: true, full: fullText })}\n\n`))
       }
     },
   })

@@ -3,7 +3,7 @@
 
 import { loadMemoryContext, saveMessage } from '../../lib/memory-engine'
 import { buildSystemPrompt, buildMessageHistory } from '../../lib/context-builder'
-import { streamGemini } from '../../lib/gemini-client'
+import { streamGemini, streamGeminiFlashLite } from '../../lib/gemini-client'
 import type { Persona, ReplyLanguage } from '../../types/index'
 import { createApiLogger } from '../../lib/api-log'
 
@@ -11,6 +11,8 @@ interface Env {
   BUCKET: R2Bucket
 
   DEEPINFRA_API_KEY: string
+  GEMINI_API_KEY?: string
+  GEMINI_VISION_MODEL?: string
   DEEPINFRA_MODEL?: string
   DEEPINFRA_MAX_TOKENS?: string
   DEEPINFRA_COALESCE_CHARS?: string
@@ -87,9 +89,10 @@ export const onRequestPost: PagesFunction<Env> = async (ctx) => {
     apiLog.fail('empty message and image', { stage: 'validate' })
     return errJson('消息不能为空', 400)
   }
+  const hasImage = Boolean(imageBase64)
   if (debug) {
     console.log(
-      `[chat ${reqId}] in message_len=${message.length} has_image=${Boolean(imageBase64)} lang=${replyLanguage}`
+      `[chat ${reqId}] in message_len=${message.length} has_image=${hasImage} lang=${replyLanguage}`
     )
   }
 
@@ -132,9 +135,12 @@ export const onRequestPost: PagesFunction<Env> = async (ctx) => {
   // ⑤ 调用 Gemini 流式
   const maxOutputTokens = Number.parseInt(env.DEEPINFRA_MAX_TOKENS || '', 10)
   const coalesceChars = Number.parseInt(env.DEEPINFRA_COALESCE_CHARS || '', 10)
+  const deepinfraModel = env.DEEPINFRA_MODEL || 'meta-llama/Llama-3.2-3B-Instruct'
+  const visionModel = env.GEMINI_VISION_MODEL || 'gemini-2.5-flash-lite'
+  const provider = hasImage ? 'gemini' : 'deepinfra'
   if (debug) {
     console.log(
-      `[chat ${reqId}] deepinfra_config model=${env.DEEPINFRA_MODEL || 'default'} ` +
+      `[chat ${reqId}] provider=${provider} model=${hasImage ? visionModel : deepinfraModel} ` +
       `max_tokens=${Number.isFinite(maxOutputTokens) ? maxOutputTokens : 'default'} ` +
       `coalesce=${Number.isFinite(coalesceChars) ? coalesceChars : 'default'} ` +
       `prep_ms=${Date.now() - startedAt}`
@@ -142,15 +148,29 @@ export const onRequestPost: PagesFunction<Env> = async (ctx) => {
   }
   let geminiStream: ReadableStream<Uint8Array>
   try {
-    geminiStream = await streamGemini(env.DEEPINFRA_API_KEY, systemPrompt, messages, {
-      debug,
-      reqId,
-      model: env.DEEPINFRA_MODEL,
-      maxOutputTokens: Number.isFinite(maxOutputTokens) ? maxOutputTokens : undefined,
-      coalesceChars: Number.isFinite(coalesceChars) ? coalesceChars : undefined,
-    })
+    if (hasImage) {
+      if (!env.GEMINI_API_KEY) {
+        apiLog.fail('missing GEMINI_API_KEY', { stage: 'model', provider: 'gemini' })
+        return errJson('缺少 GEMINI_API_KEY（图片分析需要 Gemini 2.5 Flash-Lite）', 500)
+      }
+      geminiStream = await streamGeminiFlashLite(env.GEMINI_API_KEY, systemPrompt, messages, {
+        debug,
+        reqId,
+        model: visionModel,
+        maxOutputTokens: Number.isFinite(maxOutputTokens) ? maxOutputTokens : undefined,
+        coalesceChars: Number.isFinite(coalesceChars) ? coalesceChars : undefined,
+      })
+    } else {
+      geminiStream = await streamGemini(env.DEEPINFRA_API_KEY, systemPrompt, messages, {
+        debug,
+        reqId,
+        model: deepinfraModel,
+        maxOutputTokens: Number.isFinite(maxOutputTokens) ? maxOutputTokens : undefined,
+        coalesceChars: Number.isFinite(coalesceChars) ? coalesceChars : undefined,
+      })
+    }
   } catch (e) {
-    apiLog.fail(e, { stage: 'model' })
+    apiLog.fail(e, { stage: 'model', provider })
     return errJson('模型调用失败', 500)
   }
 
