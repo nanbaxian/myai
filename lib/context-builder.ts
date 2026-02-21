@@ -18,6 +18,7 @@ export function buildSystemPrompt(
 
   parts.push(`# Current Turn Anchor\n${turnAnchor(latestUserText)}`)
   parts.push(`# Fact Priority\n${factPriorityGuide(latestUserText)}`)
+  parts.push(`# Direct Question Handling\n${directQuestionGuide(latestUserText)}`)
   parts.push(`# Response Language\n${languageGuide(latestUserText, uiLanguage)}`)
   parts.push(`# Persona\n${persona.prompt}`)
 
@@ -105,6 +106,36 @@ function factPriorityGuide(latestUserText: string): string {
     '- Do not switch the user to another timezone unless the user explicitly asks for conversion.',
     '- If conversion is requested and the target timezone is missing, ask one short clarification.',
     '- Avoid back-questioning facts that the user just stated (time/location).',
+    '- Never claim your own real-world city, timezone, or local clock as if it were a human personal fact.',
+  ].join('\n')
+}
+
+function directQuestionGuide(latestUserText: string): string {
+  const t = (latestUserText || '').trim().toLowerCase()
+  const asksTime =
+    /(你的时间|你那边几点|现在几点|what time|your time|time now|你几点)/i.test(t)
+  const hasQuestionMark = /[?？]/.test(t)
+
+  if (asksTime) {
+    return [
+      '- The user is asking for your time. Answer directly in the first sentence.',
+      '- Do not claim a personal physical location or personal local clock.',
+      '- Do not output system/server clock time.',
+      '- Say you do not have a personal local time, then use the user-provided time as reference for this conversation.',
+      '- Do not reply with a paraphrased question.',
+    ].join('\n')
+  }
+
+  if (hasQuestionMark) {
+    return [
+      '- If the user asks a direct question, answer it first before asking follow-up questions.',
+      '- Avoid question-only replies that simply rephrase the user\'s message.',
+    ].join('\n')
+  }
+
+  return [
+    '- Prefer concrete responses over reflective paraphrasing.',
+    '- Ask follow-up questions only when they add new value.',
   ].join('\n')
 }
 
@@ -180,6 +211,7 @@ function styleGuide(style: string): string {
 - Avoid bullet-point style in final user-facing replies
 - Never repeat self-introduction unless user explicitly asks who you are
 - Do not echo the user's sentence verbatim; move the conversation forward
+- Do not output empty-flattering filler without useful content
 - If user sends an image, describe it naturally and tie it to the conversation`
   const tips: Record<string, string> = {
     short: '- Keep it brief (1-3 sentences) and conversational.',
