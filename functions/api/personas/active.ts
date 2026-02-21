@@ -2,6 +2,7 @@
 // GET /api/personas/active  PUT /api/personas/active
 
 import type { Persona } from '../../../types/index'
+import { createApiLogger } from '../../../lib/api-log'
 
 interface Env {
   SUPABASE_URL: string
@@ -32,7 +33,6 @@ async function getActivePersonaId(supabaseUrl: string, key: string): Promise<str
     if (!res.ok) return null
     const [row] = await res.json() as AppSetting[]
     if (!row) return null
-    // Supabase JSONB 返回已解析值：可能是字符串 "uuid" 或 JSON 字符串 '"uuid"'
     const val = row.value
     if (typeof val === 'string') {
       try { return JSON.parse(val) } catch { return val }
@@ -43,50 +43,76 @@ async function getActivePersonaId(supabaseUrl: string, key: string): Promise<str
   }
 }
 
-export const onRequestGet: PagesFunction<Env> = async ({ env }) => {
-  const personaId = await getActivePersonaId(env.SUPABASE_URL, env.SUPABASE_SERVICE_KEY)
+export const onRequestGet: PagesFunction<Env> = async (ctx) => {
+  const { env } = ctx
+  const log = createApiLogger('personas:active:get', ctx)
+  log.start()
+  try {
+    const personaId = await getActivePersonaId(env.SUPABASE_URL, env.SUPABASE_SERVICE_KEY)
 
-  if (!personaId) {
-    // 兜底：取第一个人设
-    const res = await fetch(`${env.SUPABASE_URL}/rest/v1/personas?limit=1`, { headers: sb(env.SUPABASE_SERVICE_KEY) })
-    const [p] = await res.json() as Persona[]
-    return json(p ?? null)
-  }
+    if (!personaId) {
+      const res = await fetch(`${env.SUPABASE_URL}/rest/v1/personas?limit=1`, { headers: sb(env.SUPABASE_SERVICE_KEY) })
+      const [p] = await res.json() as Persona[]
+      log.ok({ source: 'fallback', hasPersona: Boolean(p) })
+      return json(p ?? null)
+    }
 
-  const res = await fetch(`${env.SUPABASE_URL}/rest/v1/personas?id=eq.${personaId}&limit=1`, { headers: sb(env.SUPABASE_SERVICE_KEY) })
-  const [persona] = await res.json() as Persona[]
-  // 如果 personaId 指向的人设已被删除，回退到第一个
-  if (!persona) {
-    const fallback = await fetch(`${env.SUPABASE_URL}/rest/v1/personas?limit=1`, { headers: sb(env.SUPABASE_SERVICE_KEY) })
-    const [p] = await fallback.json() as Persona[]
-    return json(p ?? null)
+    const res = await fetch(`${env.SUPABASE_URL}/rest/v1/personas?id=eq.${personaId}&limit=1`, { headers: sb(env.SUPABASE_SERVICE_KEY) })
+    const [persona] = await res.json() as Persona[]
+    if (!persona) {
+      const fallback = await fetch(`${env.SUPABASE_URL}/rest/v1/personas?limit=1`, { headers: sb(env.SUPABASE_SERVICE_KEY) })
+      const [p] = await fallback.json() as Persona[]
+      log.ok({ source: 'fallback-deleted', hasPersona: Boolean(p), personaId })
+      return json(p ?? null)
+    }
+    log.ok({ personaId: persona.id })
+    return json(persona)
+  } catch (e) {
+    log.fail(e)
+    return json({ error: '读取失败' }, 500)
   }
-  return json(persona)
 }
 
-export const onRequestPut: PagesFunction<Env> = async ({ request, env }) => {
-  const body = await request.json() as { persona_id?: string }
-  if (!body.persona_id) return json({ error: 'persona_id 不能为空' }, 400)
+export const onRequestPut: PagesFunction<Env> = async (ctx) => {
+  const { request, env } = ctx
+  const log = createApiLogger('personas:active:put', ctx)
+  log.start()
+  try {
+    const body = await request.json() as { persona_id?: string }
+    if (!body.persona_id) {
+      log.fail('persona_id required', { stage: 'validate' })
+      return json({ error: 'persona_id 不能为空' }, 400)
+    }
 
-  const existing = await getActivePersonaId(env.SUPABASE_URL, env.SUPABASE_SERVICE_KEY)
-  const value = JSON.stringify(body.persona_id)
+    const existing = await getActivePersonaId(env.SUPABASE_URL, env.SUPABASE_SERVICE_KEY)
+    const value = JSON.stringify(body.persona_id)
 
-  if (existing !== null) {
-    // 行已存在 → PATCH
-    const patchRes = await fetch(`${env.SUPABASE_URL}/rest/v1/app_settings?key=eq.active_persona_id`, {
-      method: 'PATCH',
-      headers: sb(env.SUPABASE_SERVICE_KEY),
-      body: JSON.stringify({ value, updated_at: new Date().toISOString() }),
-    })
-    if (!patchRes.ok) return json({ error: '更新失败' }, 500)
-  } else {
-    // 行不存在 → INSERT
-    const insertRes = await fetch(`${env.SUPABASE_URL}/rest/v1/app_settings`, {
-      method: 'POST',
-      headers: sb(env.SUPABASE_SERVICE_KEY),
-      body: JSON.stringify({ key: 'active_persona_id', value, updated_at: new Date().toISOString() }),
-    })
-    if (!insertRes.ok) return json({ error: '写入失败' }, 500)
+    if (existing !== null) {
+      const patchRes = await fetch(`${env.SUPABASE_URL}/rest/v1/app_settings?key=eq.active_persona_id`, {
+        method: 'PATCH',
+        headers: sb(env.SUPABASE_SERVICE_KEY),
+        body: JSON.stringify({ value, updated_at: new Date().toISOString() }),
+      })
+      if (!patchRes.ok) {
+        log.fail('patch active persona failed', { stage: 'db', status: patchRes.status })
+        return json({ error: '更新失败' }, 500)
+      }
+    } else {
+      const insertRes = await fetch(`${env.SUPABASE_URL}/rest/v1/app_settings`, {
+        method: 'POST',
+        headers: sb(env.SUPABASE_SERVICE_KEY),
+        body: JSON.stringify({ key: 'active_persona_id', value, updated_at: new Date().toISOString() }),
+      })
+      if (!insertRes.ok) {
+        log.fail('insert active persona failed', { stage: 'db', status: insertRes.status })
+        return json({ error: '写入失败' }, 500)
+      }
+    }
+    log.ok({ personaId: body.persona_id })
+    return json({ success: true })
+  } catch (e) {
+    log.fail(e)
+    return json({ error: '更新失败' }, 500)
   }
-  return json({ success: true })
 }
+

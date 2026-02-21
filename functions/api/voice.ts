@@ -13,6 +13,7 @@
 import { verifySupabaseJwt } from '@/lib/auth'
 import { getUserPlan } from '@/lib/plan'
 import { quotaKey, getUsedSeconds, addUsedSeconds, FREE_DAILY_SECONDS } from '@/lib/voice-quota'
+import { createApiLogger } from '@/lib/api-log'
 
 interface Env {
   BUCKET: R2Bucket
@@ -59,13 +60,19 @@ function withQuotaHeaders(resp: Response, plan: 'free' | 'pro', remaining?: numb
 // ================================================
 // POST /api/voice — 语音转文字（Deepgram）
 // ================================================
-export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
+export const onRequestPost: PagesFunction<Env> = async (ctx) => {
+  const { request, env } = ctx
+  const log = createApiLogger('voice:post', ctx)
+  log.start({ contentType: request.headers.get('content-type') || 'unknown' })
+
   // Auth required
   let userId = ''
   try {
     const u = await verifySupabaseJwt(request, env)
     userId = u.userId
-  } catch {
+    log.info('auth:ok', { userId })
+  } catch (e) {
+    log.fail(e, { stage: 'auth' })
     return jsonError('未登录：请使用 Magic Link 登录后再试', 401)
   }
 
@@ -82,22 +89,35 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     const audioUrl = body?.audioUrl as string | undefined
     durationSeconds = Number(body?.durationSeconds || 0)
 
-    if (!audioUrl) return jsonError('缺少 audioUrl', 400)
+    if (!audioUrl) {
+      log.fail('missing audioUrl', { stage: 'validate', userId })
+      return jsonError('缺少 audioUrl', 400)
+    }
     const mm = audioUrl.match(/^\/r2\/([A-Za-z0-9\-]+)$/)
-    if (!mm) return jsonError('audioUrl 格式不正确', 400)
+    if (!mm) {
+      log.fail('invalid audioUrl format', { stage: 'validate', userId })
+      return jsonError('audioUrl 格式不正确', 400)
+    }
     const obj = await env.BUCKET.get(mm[1])
-    if (!obj) return jsonError('音频不存在', 404)
+    if (!obj) {
+      log.fail('audio not found in r2', { stage: 'r2:get', userId, key: mm[1] })
+      return jsonError('音频不存在', 404)
+    }
     audioArrayBuffer = await obj.arrayBuffer()
     mimeType = obj.httpMetadata?.contentType || mimeType
   } else {
     let formData: FormData
     try {
       formData = await request.formData()
-    } catch {
+    } catch (e) {
+      log.fail(e, { stage: 'parse', userId })
       return jsonError('请求格式错误，需要 multipart/form-data 或 application/json', 400)
     }
     const audioFile = formData.get('audio') as File | null
-    if (!audioFile) return jsonError('未收到音频文件', 400)
+    if (!audioFile) {
+      log.fail('missing audio file', { stage: 'validate', userId })
+      return jsonError('未收到音频文件', 400)
+    }
     const durationMs = Number(request.headers.get('x-audio-duration-ms') || 0)
     durationSeconds = Math.ceil(Math.max(1, durationMs) / 1000)
     audioArrayBuffer = await audioFile.arrayBuffer()
@@ -110,6 +130,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     const used = await getUsedSeconds(env.VOICE_KV, key)
     remaining = Math.max(0, FREE_DAILY_SECONDS - used)
     if (remaining <= 0) {
+      log.fail('quota exceeded', { stage: 'quota', userId, plan })
       return withQuotaHeaders(jsonError('今日语音体验已用完（免费用户每日 10 分钟）', 402), plan, 0)
     }
   }
@@ -138,6 +159,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
 
   if (!dgRes.ok) {
     console.error('[deepgram]', await dgRes.text())
+    log.fail('deepgram failed', { stage: 'stt', userId, plan })
     return jsonError('语音识别失败', 500)
   }
 
@@ -153,6 +175,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   const res = new Response(JSON.stringify({ text: String(text).trim() }), {
     headers: { ...cors, 'Content-Type': 'application/json' },
   })
+  log.ok({ userId, plan, transcriptLen: String(text).trim().length })
   return withQuotaHeaders(res, plan, plan === 'free' ? remaining : undefined)
 }
 
@@ -161,13 +184,19 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
 // Free：Google TTS
 // Pro ：ElevenLabs
 // ================================================
-export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
+export const onRequestGet: PagesFunction<Env> = async (ctx) => {
+  const { request, env } = ctx
+  const log = createApiLogger('voice:get', ctx)
+  log.start()
+
   // Auth required
   let userId = ''
   try {
     const u = await verifySupabaseJwt(request, env)
     userId = u.userId
-  } catch {
+    log.info('auth:ok', { userId })
+  } catch (e) {
+    log.fail(e, { stage: 'auth' })
     return jsonError('未登录：请使用 Magic Link 登录后再试', 401)
   }
 
@@ -176,7 +205,10 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
 
   const u = new URL(request.url)
   const text = u.searchParams.get('text')
-  if (!text) return jsonError('text 参数不能为空', 400)
+  if (!text) {
+    log.fail('missing text', { stage: 'validate', userId })
+    return jsonError('text 参数不能为空', 400)
+  }
 
   // Free 配额检查
   let remaining = 0
@@ -184,6 +216,7 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
     const used = await getUsedSeconds(env.VOICE_KV, key)
     remaining = Math.max(0, FREE_DAILY_SECONDS - used)
     if (remaining <= 0) {
+      log.fail('quota exceeded', { stage: 'quota', userId, plan })
       return withQuotaHeaders(jsonError('今日语音体验已用完（免费用户每日 10 分钟）', 402), plan, 0)
     }
   }
@@ -221,6 +254,7 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
           'Cache-Control': 'no-store',
         },
       })
+      log.ok({ userId, plan, provider: 'elevenlabs', chars })
       return withQuotaHeaders(resp, plan)
     }
 
@@ -248,12 +282,16 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
 
   if (!ggRes.ok) {
     console.error('[google tts]', await ggRes.text())
+    log.fail('google tts failed', { stage: 'tts', userId, plan, provider: 'google' })
     return jsonError('语音合成失败', 500)
   }
 
   const ggJson = await ggRes.json() as { audioContent?: string }
   const b64 = ggJson.audioContent
-  if (!b64) return jsonError('语音合成失败：空返回', 500)
+  if (!b64) {
+    log.fail('google tts empty audioContent', { stage: 'tts', userId, plan, provider: 'google' })
+    return jsonError('语音合成失败：空返回', 500)
+  }
 
   // free 扣配额
   if (plan === 'free') {
@@ -270,6 +308,7 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
     },
   })
 
+  log.ok({ userId, plan, provider: 'google', chars })
   return withQuotaHeaders(resp, plan, plan === 'free' ? remaining : undefined)
 }
 

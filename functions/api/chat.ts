@@ -5,6 +5,7 @@ import { loadMemoryContext, saveMessage } from '../../lib/memory-engine'
 import { buildSystemPrompt, buildMessageHistory } from '../../lib/context-builder'
 import { streamGemini } from '../../lib/gemini-client'
 import type { Persona, ReplyLanguage } from '../../types/index'
+import { createApiLogger } from '../../lib/api-log'
 
 interface Env {
   BUCKET: R2Bucket
@@ -47,14 +48,20 @@ const cors = {
 
 export const onRequestOptions = (): Response => new Response(null, { headers: cors })
 
-export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
-  const reqId = crypto.randomUUID().slice(0, 8)
+export const onRequestPost: PagesFunction<Env> = async (ctx) => {
+  const { request, env } = ctx
+  const apiLog = createApiLogger('chat:post', ctx)
+  const reqId = apiLog.reqId
   const startedAt = Date.now()
   const debug = true
+  apiLog.start({ debug })
   console.log(`[chat ${reqId}] request_start debug=${debug}`)
   let body: { message?: string; imageBase64?: string; imageUrl?: string; replyLanguage?: ReplyLanguage }
   try { body = await request.json() }
-  catch { return errJson('请求格式错误', 400) }
+  catch (e) {
+    apiLog.fail(e, { stage: 'parse' })
+    return errJson('请求格式错误', 400)
+  }
 
   const { message = '', imageUrl } = body
   let { imageBase64 } = body
@@ -66,7 +73,10 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     const r2 = await r2ImageUrlToBase64(env, imageUrl)
     if (r2?.base64) imageBase64 = r2.base64
   }
-  if (!message && !imageBase64) return errJson('消息不能为空', 400)
+  if (!message && !imageBase64) {
+    apiLog.fail('empty message and image', { stage: 'validate' })
+    return errJson('消息不能为空', 400)
+  }
   if (debug) {
     console.log(
       `[chat ${reqId}] in message_len=${message.length} has_image=${Boolean(imageBase64)} lang=${replyLanguage}`
@@ -78,7 +88,10 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
 
   // ① 取活跃人设（先查 app_settings，再回退到第一个）
   const persona = await getActivePersona(sbUrl, sbKey)
-  if (!persona) return errJson('未找到人设配置', 500)
+  if (!persona) {
+    apiLog.fail('active persona not found', { stage: 'persona' })
+    return errJson('未找到人设配置', 500)
+  }
 
   // ② 加载记忆（传入当前消息做语义搜索，优先用 Workers AI binding 生成向量）
   const memory = await loadMemoryContext(sbUrl, sbKey, message || undefined, env.DEEPINFRA_API_KEY, persona.id, env.AI)
@@ -117,13 +130,19 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
       `prep_ms=${Date.now() - startedAt}`
     )
   }
-  const geminiStream = await streamGemini(env.DEEPINFRA_API_KEY, systemPrompt, messages, {
-    debug,
-    reqId,
-    model: env.DEEPINFRA_MODEL,
-    maxOutputTokens: Number.isFinite(maxOutputTokens) ? maxOutputTokens : undefined,
-    coalesceChars: Number.isFinite(coalesceChars) ? coalesceChars : undefined,
-  })
+  let geminiStream: ReadableStream<Uint8Array>
+  try {
+    geminiStream = await streamGemini(env.DEEPINFRA_API_KEY, systemPrompt, messages, {
+      debug,
+      reqId,
+      model: env.DEEPINFRA_MODEL,
+      maxOutputTokens: Number.isFinite(maxOutputTokens) ? maxOutputTokens : undefined,
+      coalesceChars: Number.isFinite(coalesceChars) ? coalesceChars : undefined,
+    })
+  } catch (e) {
+    apiLog.fail(e, { stage: 'model' })
+    return errJson('模型调用失败', 500)
+  }
 
   // ⑥ 拦截流 → 捕获完整回复后保存 AI 消息
   let fullText  = ''
@@ -146,6 +165,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
             if (d.done && !savedAi) {
               savedAi = true
               if (debug) console.log(`[chat ${reqId}] done full_len=${fullText.length}`)
+              apiLog.ok({ personaId: persona.id, fullLen: fullText.length })
               saveUserMsg.then(() =>
                 saveMessage(sbUrl, sbKey, 'assistant', fullText || '...', { persona_id: persona.id })
                   .catch(e => console.error('[save ai msg]', e))
@@ -163,6 +183,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
           if (d.done && !savedAi) {
             savedAi = true
             if (debug) console.log(`[chat ${reqId}] done@flush full_len=${fullText.length}`)
+            apiLog.ok({ personaId: persona.id, fullLen: fullText.length, source: 'flush' })
             saveUserMsg.then(() =>
               saveMessage(sbUrl, sbKey, 'assistant', fullText || '...', { persona_id: persona.id })
                 .catch(e => console.error('[save ai msg flush]', e))
