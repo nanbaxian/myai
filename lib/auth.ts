@@ -38,27 +38,42 @@ export async function verifySupabaseJwt(req: Request, env: any): Promise<AuthUse
   const rawSupabaseUrl = String(env.SUPABASE_URL || '').trim()
   if (!rawSupabaseUrl) throw new Error('Missing SUPABASE_URL')
   const supabaseUrl = rawSupabaseUrl.replace(/\/+$/, '')
-  const certsUrl = /\/auth\/v1$/i.test(supabaseUrl)
-    ? `${supabaseUrl}/certs`
-    : `${supabaseUrl}/auth/v1/certs`
+  const isAuthBase = /\/auth\/v1$/i.test(supabaseUrl)
+  const jwksUrls = isAuthBase
+    ? [
+        `${supabaseUrl}/certs`,
+        `${supabaseUrl}/.well-known/jwks.json`,
+      ]
+    : [
+        `${supabaseUrl}/auth/v1/certs`,
+        `${supabaseUrl}/auth/v1/.well-known/jwks.json`,
+      ]
   const certsApiKey = String(env.SUPABASE_ANON_KEY || env.SUPABASE_SERVICE_KEY || '').trim()
 
-  // Fetch JWKS (cached by Cloudflare)
-  let jwksRes: Response
-  try {
-    jwksRes = await fetch(certsUrl, {
-      headers: certsApiKey
-        ? {
-            apikey: certsApiKey,
-            Authorization: `Bearer ${certsApiKey}`,
-          }
-        : undefined,
-      cf: { cacheTtl: 3600, cacheEverything: true } as any,
-    })
-  } catch (e: any) {
-    throw new Error(`Failed to fetch JWKS: ${e?.message || 'network error'} (${certsUrl})`)
+  // Fetch JWKS (cached by Cloudflare), with endpoint fallback for different GoTrue versions.
+  let jwksRes: Response | null = null
+  const attempts: string[] = []
+  for (const url of jwksUrls) {
+    try {
+      const res = await fetch(url, {
+        headers: certsApiKey
+          ? {
+              apikey: certsApiKey,
+              Authorization: `Bearer ${certsApiKey}`,
+            }
+          : undefined,
+        cf: { cacheTtl: 3600, cacheEverything: true } as any,
+      })
+      attempts.push(`${res.status} ${url}`)
+      if (res.ok) {
+        jwksRes = res
+        break
+      }
+    } catch (e: any) {
+      attempts.push(`ERR ${url}: ${e?.message || 'network error'}`)
+    }
   }
-  if (!jwksRes.ok) throw new Error(`Failed to fetch JWKS: ${jwksRes.status} (${certsUrl})`)
+  if (!jwksRes) throw new Error(`Failed to fetch JWKS: ${attempts.join(' | ')}`)
   const jwks = await jwksRes.json() as any
   const jwk = (jwks.keys || []).find((k: any) => k.kid === kid)
   if (!jwk) throw new Error('No matching JWK')
