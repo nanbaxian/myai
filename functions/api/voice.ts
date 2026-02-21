@@ -21,6 +21,7 @@ interface Env {
   // Free tier
   DEEPGRAM_API_KEY: string
   GOOGLE_TTS_API_KEY: string
+  DEEPGRAM_TTS_MODEL_EN?: string
 
   // Pro tier
   ELEVENLABS_API_KEY?: string
@@ -38,6 +39,7 @@ interface Env {
 
 type SttLanguage = 'zh' | 'en'
 type VoiceLanguage = 'zh' | 'en'
+type TtsProvider = 'deepgram' | 'elevenlabs' | 'google'
 
 const cors = {
   'Access-Control-Allow-Origin': '*',
@@ -52,11 +54,12 @@ function jsonError(msg: string, status: number): Response {
   })
 }
 
-function withQuotaHeaders(resp: Response, plan: 'free' | 'pro', remaining?: number): Response {
+function withQuotaHeaders(resp: Response, plan: 'free' | 'pro', remaining?: number, provider?: TtsProvider): Response {
   const h = new Headers(resp.headers)
   h.set('Access-Control-Allow-Origin', cors['Access-Control-Allow-Origin'])
   h.set('X-Voice-Plan', plan)
   if (typeof remaining === 'number') h.set('X-Voice-Remaining-Seconds', String(remaining))
+  if (provider) h.set('X-Voice-Provider', provider)
   return new Response(resp.body, { status: resp.status, headers: h })
 }
 
@@ -115,6 +118,11 @@ function normalizeSttLanguage(v: unknown): SttLanguage {
 function normalizeVoiceLanguage(v: unknown): VoiceLanguage {
   if (v === 'zh' || v === 'en') return v
   return 'zh'
+}
+
+function normalizeTtsProvider(v: unknown): TtsProvider {
+  if (v === 'deepgram' || v === 'elevenlabs' || v === 'google') return v
+  return 'deepgram'
 }
 
 // ================================================
@@ -326,6 +334,7 @@ export const onRequestGet: PagesFunction<Env> = async (ctx) => {
   const u = new URL(request.url)
   const text = u.searchParams.get('text')
   const voiceLanguage = normalizeVoiceLanguage(u.searchParams.get('lang'))
+  const requestedProvider = normalizeTtsProvider(u.searchParams.get('provider'))
   if (!text) {
     log.fail('missing text', { stage: 'validate', userId })
     return jsonError('text 参数不能为空', 400)
@@ -348,8 +357,89 @@ export const onRequestGet: PagesFunction<Env> = async (ctx) => {
   const chars = text.length
   const estSeconds = Math.max(1, Math.min(180, Math.ceil((chars / 900) * 60)))
 
-  // Pro：优先 ElevenLabs（若未配置则回退 Google）
-  if (plan === 'pro' && env.ELEVENLABS_API_KEY) {
+  const chargeQuota = async () => {
+    if (plan === 'free') {
+      const r = await addUsedSeconds(env.VOICE_KV, key, estSeconds)
+      remaining = r.remaining
+    }
+  }
+
+  const providerOrder: TtsProvider[] = (() => {
+    if (requestedProvider === 'deepgram') return ['deepgram', 'elevenlabs', 'google']
+    if (requestedProvider === 'elevenlabs') return ['elevenlabs', 'deepgram', 'google']
+    return ['google', 'deepgram', 'elevenlabs']
+  })()
+
+  // Provider 1: Deepgram Aura
+  if (providerOrder.includes('deepgram')) {
+    if (resolvedVoiceLanguage !== 'en') {
+      log.fail('deepgram tts unsupported language', {
+        stage: 'tts',
+        userId,
+        plan,
+        provider: 'deepgram',
+        resolvedVoiceLanguage,
+      })
+    } else {
+      const dgModel = env.DEEPGRAM_TTS_MODEL_EN || 'aura-2-thalia-en'
+      const dgUrl = new URL('https://api.deepgram.com/v1/speak')
+      dgUrl.searchParams.set('model', dgModel)
+      dgUrl.searchParams.set('encoding', 'mp3')
+      const dgStartedAt = Date.now()
+      log.info('deepgram-tts:request', {
+        userId,
+        plan,
+        chars,
+        estSeconds,
+        requestedLanguage: voiceLanguage,
+        resolvedLanguage: resolvedVoiceLanguage,
+        model: dgModel,
+      })
+      const dgRes = await fetch(dgUrl.toString(), {
+        method: 'POST',
+        headers: {
+          Authorization: `Token ${env.DEEPGRAM_API_KEY}`,
+          'Content-Type': 'application/json',
+          Accept: 'audio/mpeg',
+        },
+        body: JSON.stringify({ text: text.slice(0, 1200) }),
+      })
+      log.info('deepgram-tts:response', {
+        userId,
+        plan,
+        status: dgRes.status,
+        ok: dgRes.ok,
+        latencyMs: Date.now() - dgStartedAt,
+        requestId: dgRes.headers.get('dg-request-id') || dgRes.headers.get('x-request-id') || '',
+        contentType: dgRes.headers.get('content-type') || '',
+      })
+      if (dgRes.ok) {
+        await chargeQuota()
+        const resp = new Response(dgRes.body, {
+          headers: {
+            ...cors,
+            'Content-Type': dgRes.headers.get('content-type') || 'audio/mpeg',
+            'Cache-Control': 'no-store',
+          },
+        })
+        log.ok({ userId, plan, provider: 'deepgram', chars })
+        return withQuotaHeaders(resp, plan, plan === 'free' ? remaining : undefined, 'deepgram')
+      }
+      const dgBody = await dgRes.text()
+      console.error('[deepgram tts]', dgBody)
+      log.fail('deepgram tts failed', {
+        stage: 'tts',
+        userId,
+        plan,
+        provider: 'deepgram',
+        status: dgRes.status,
+        bodyPreview: dgBody.slice(0, 400),
+      })
+    }
+  }
+
+  // Provider 2: ElevenLabs
+  if (providerOrder.includes('elevenlabs') && env.ELEVENLABS_API_KEY) {
     const voiceId = env.ELEVENLABS_VOICE_ID || '21m00Tcm4TlvDq8ikWAM' // ElevenLabs 常用默认
     const elUrl = `https://api.elevenlabs.io/v1/text-to-speech/${encodeURIComponent(voiceId)}/stream`
     const elStartedAt = Date.now()
@@ -388,6 +478,7 @@ export const onRequestGet: PagesFunction<Env> = async (ctx) => {
     })
 
     if (elRes.ok) {
+      await chargeQuota()
       const resp = new Response(elRes.body, {
         headers: {
           ...cors,
@@ -396,7 +487,7 @@ export const onRequestGet: PagesFunction<Env> = async (ctx) => {
         },
       })
       log.ok({ userId, plan, provider: 'elevenlabs', chars })
-      return withQuotaHeaders(resp, plan)
+      return withQuotaHeaders(resp, plan, plan === 'free' ? remaining : undefined, 'elevenlabs')
     }
 
     const elBody = await elRes.text()
@@ -409,90 +500,93 @@ export const onRequestGet: PagesFunction<Env> = async (ctx) => {
       status: elRes.status,
       bodyPreview: elBody.slice(0, 400),
     })
-    // 失败回退 Google
+    // 失败回退其他 provider
   }
 
-  // Free：Google TTS
-  const ggUrl = `https://texttospeech.googleapis.com/v1/text:synthesize?key=${env.GOOGLE_TTS_API_KEY}`
-  const ggStartedAt = Date.now()
-  log.info('google-tts:request', {
-    userId,
-    plan,
-    chars,
-    estSeconds,
-    requestedLanguage: voiceLanguage,
-    resolvedLanguage: resolvedVoiceLanguage,
-    languageCode: googleLanguageCode,
-    audioEncoding: 'MP3',
-  })
-  const ggRes = await fetch(ggUrl, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      input: { text: text.slice(0, 1200) },
-      voice: {
-        languageCode: googleLanguageCode,
-      },
-      audioConfig: {
-        audioEncoding: 'MP3',
-        speakingRate: 1.0,
-      },
-    }),
-  })
-  log.info('google-tts:response', {
-    userId,
-    plan,
-    status: ggRes.status,
-    ok: ggRes.ok,
-    latencyMs: Date.now() - ggStartedAt,
-    requestId: ggRes.headers.get('x-request-id') || ggRes.headers.get('request-id') || '',
-    contentType: ggRes.headers.get('content-type') || '',
-  })
-
-  if (!ggRes.ok) {
-    const ggBody = await ggRes.text()
-    console.error('[google tts]', ggBody)
-    log.fail('google tts failed', {
-      stage: 'tts',
+  // Provider 3: Google TTS
+  if (providerOrder.includes('google')) {
+    const ggUrl = `https://texttospeech.googleapis.com/v1/text:synthesize?key=${env.GOOGLE_TTS_API_KEY}`
+    const ggStartedAt = Date.now()
+    log.info('google-tts:request', {
       userId,
       plan,
-      provider: 'google',
-      status: ggRes.status,
-      bodyPreview: ggBody.slice(0, 400),
+      chars,
+      estSeconds,
+      requestedLanguage: voiceLanguage,
+      resolvedLanguage: resolvedVoiceLanguage,
+      languageCode: googleLanguageCode,
+      audioEncoding: 'MP3',
     })
-    return jsonError('语音合成失败', 500)
+    const ggRes = await fetch(ggUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        input: { text: text.slice(0, 1200) },
+        voice: {
+          languageCode: googleLanguageCode,
+        },
+        audioConfig: {
+          audioEncoding: 'MP3',
+          speakingRate: 1.0,
+        },
+      }),
+    })
+    log.info('google-tts:response', {
+      userId,
+      plan,
+      status: ggRes.status,
+      ok: ggRes.ok,
+      latencyMs: Date.now() - ggStartedAt,
+      requestId: ggRes.headers.get('x-request-id') || ggRes.headers.get('request-id') || '',
+      contentType: ggRes.headers.get('content-type') || '',
+    })
+
+    if (!ggRes.ok) {
+      const ggBody = await ggRes.text()
+      console.error('[google tts]', ggBody)
+      log.fail('google tts failed', {
+        stage: 'tts',
+        userId,
+        plan,
+        provider: 'google',
+        status: ggRes.status,
+        bodyPreview: ggBody.slice(0, 400),
+      })
+    } else {
+      const ggJson = await ggRes.json() as { audioContent?: string }
+      const b64 = ggJson.audioContent
+      log.info('google-tts:parsed', {
+        userId,
+        plan,
+        hasAudioContent: Boolean(b64),
+        audioContentLen: b64?.length || 0,
+      })
+      if (!b64) {
+        log.fail('google tts empty audioContent', { stage: 'tts', userId, plan, provider: 'google' })
+      } else {
+        await chargeQuota()
+        const bin = Uint8Array.from(atob(b64), c => c.charCodeAt(0))
+        const resp = new Response(bin, {
+          headers: {
+            ...cors,
+            'Content-Type': 'audio/mpeg',
+            'Cache-Control': 'no-store',
+          },
+        })
+        log.ok({ userId, plan, provider: 'google', chars })
+        return withQuotaHeaders(resp, plan, plan === 'free' ? remaining : undefined, 'google')
+      }
+    }
   }
 
-  const ggJson = await ggRes.json() as { audioContent?: string }
-  const b64 = ggJson.audioContent
-  log.info('google-tts:parsed', {
+  log.fail('all tts providers failed', {
+    stage: 'tts',
     userId,
     plan,
-    hasAudioContent: Boolean(b64),
-    audioContentLen: b64?.length || 0,
+    requestedProvider,
+    resolvedVoiceLanguage,
   })
-  if (!b64) {
-    log.fail('google tts empty audioContent', { stage: 'tts', userId, plan, provider: 'google' })
-    return jsonError('语音合成失败：空返回', 500)
-  }
-
-  // free 扣配额
-  if (plan === 'free') {
-    const r = await addUsedSeconds(env.VOICE_KV, key, estSeconds)
-    remaining = r.remaining
-  }
-
-  const bin = Uint8Array.from(atob(b64), c => c.charCodeAt(0))
-  const resp = new Response(bin, {
-    headers: {
-      ...cors,
-      'Content-Type': 'audio/mpeg',
-      'Cache-Control': 'no-store',
-    },
-  })
-
-  log.ok({ userId, plan, provider: 'google', chars })
-  return withQuotaHeaders(resp, plan, plan === 'free' ? remaining : undefined)
+  return jsonError('语音合成失败', 500)
 }
 
 export const onRequestOptions = (): Response => new Response(null, { headers: cors })

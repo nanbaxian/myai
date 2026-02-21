@@ -43,12 +43,14 @@ export default function InputArea({
   lastAiMessage,
 }: Props) {
   type TtsMode = 'api' | 'browser'
+  type ApiTtsProvider = 'deepgram' | 'elevenlabs' | 'google'
   const [text, setText]               = useState('')
   const [isRecording, setIsRecording] = useState(false)
   const [isTranscribing, setIsTranscribing] = useState(false)
   const [isTTSPlaying, setIsTTSPlaying]     = useState(false)
   const [ttsEnabled, setTtsEnabled]         = useState(false)
-  const [ttsMode, setTtsMode]               = useState<TtsMode>('api')
+  const [ttsMode, setTtsMode]               = useState<TtsMode>('browser')
+  const [apiTtsProvider, setApiTtsProvider] = useState<ApiTtsProvider>('deepgram')
   const [pendingImage, setPendingImage]      = useState<{ base64: string; preview: string } | null>(null)
   const [pendingImageFile, setPendingImageFile] = useState<File | null>(null)
   const [sttError, setSttError]             = useState('')
@@ -73,14 +75,19 @@ export default function InputArea({
     try {
       const saved = window.localStorage.getItem('tts_mode')
       if (saved === 'api' || saved === 'browser') setTtsMode(saved)
+      const savedProvider = window.localStorage.getItem('tts_api_provider')
+      if (savedProvider === 'deepgram' || savedProvider === 'elevenlabs' || savedProvider === 'google') {
+        setApiTtsProvider(savedProvider)
+      }
     } catch {}
   }, [])
 
   useEffect(() => {
     try {
       window.localStorage.setItem('tts_mode', ttsMode)
+      window.localStorage.setItem('tts_api_provider', apiTtsProvider)
     } catch {}
-  }, [ttsMode])
+  }, [ttsMode, apiTtsProvider])
 
   const browserTtsLang = replyLanguage === 'en' ? 'en-US' : 'zh-CN'
 
@@ -119,7 +126,9 @@ export default function InputArea({
         setIsTTSPlaying(false)
         return
       }
-      const res = await fetch(`/api/voice?text=${encodeURIComponent(short)}&lang=${encodeURIComponent(replyLanguage)}`, {
+      const res = await fetch(
+        `/api/voice?text=${encodeURIComponent(short)}&lang=${encodeURIComponent(replyLanguage)}&provider=${encodeURIComponent(apiTtsProvider)}`,
+        {
         headers: {
           Authorization: `Bearer ${token}`,
         },
@@ -361,6 +370,18 @@ export default function InputArea({
         >
           {ttsMode === 'browser' ? '🌐' : '☁️'}
         </button>
+        {ttsMode === 'api' && (
+          <select
+            value={apiTtsProvider}
+            onChange={e => setApiTtsProvider(e.target.value as ApiTtsProvider)}
+            className="h-8 rounded-lg border border-paper-deep bg-white px-2 text-[12px] text-ink outline-none focus:border-accent-soft"
+            title="TTS API provider"
+          >
+            <option value="deepgram">Deepgram</option>
+            <option value="elevenlabs">ElevenLabs</option>
+            <option value="google">Google</option>
+          </select>
+        )}
 
         {/* 转录中提示 / 错误提示 */}
         {isTranscribing && (
