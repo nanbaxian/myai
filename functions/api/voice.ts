@@ -323,6 +323,15 @@ export const onRequestGet: PagesFunction<Env> = async (ctx) => {
   if (plan === 'pro' && env.ELEVENLABS_API_KEY) {
     const voiceId = env.ELEVENLABS_VOICE_ID || '21m00Tcm4TlvDq8ikWAM' // ElevenLabs 常用默认
     const elUrl = `https://api.elevenlabs.io/v1/text-to-speech/${encodeURIComponent(voiceId)}/stream`
+    const elStartedAt = Date.now()
+    log.info('elevenlabs:request', {
+      userId,
+      plan,
+      voiceId,
+      model: 'eleven_multilingual_v2',
+      chars,
+      estSeconds,
+    })
     const elRes = await fetch(elUrl, {
       method: 'POST',
       headers: {
@@ -339,6 +348,15 @@ export const onRequestGet: PagesFunction<Env> = async (ctx) => {
         },
       }),
     })
+    log.info('elevenlabs:response', {
+      userId,
+      plan,
+      status: elRes.status,
+      ok: elRes.ok,
+      latencyMs: Date.now() - elStartedAt,
+      requestId: elRes.headers.get('x-request-id') || elRes.headers.get('request-id') || '',
+      contentType: elRes.headers.get('content-type') || '',
+    })
 
     if (elRes.ok) {
       const resp = new Response(elRes.body, {
@@ -352,12 +370,30 @@ export const onRequestGet: PagesFunction<Env> = async (ctx) => {
       return withQuotaHeaders(resp, plan)
     }
 
-    console.error('[elevenlabs]', await elRes.text())
+    const elBody = await elRes.text()
+    console.error('[elevenlabs]', elBody)
+    log.fail('elevenlabs failed', {
+      stage: 'tts',
+      userId,
+      plan,
+      provider: 'elevenlabs',
+      status: elRes.status,
+      bodyPreview: elBody.slice(0, 400),
+    })
     // 失败回退 Google
   }
 
   // Free：Google TTS
   const ggUrl = `https://texttospeech.googleapis.com/v1/text:synthesize?key=${env.GOOGLE_TTS_API_KEY}`
+  const ggStartedAt = Date.now()
+  log.info('google-tts:request', {
+    userId,
+    plan,
+    chars,
+    estSeconds,
+    voice: 'zh-CN-Standard-A',
+    audioEncoding: 'MP3',
+  })
   const ggRes = await fetch(ggUrl, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -373,15 +409,38 @@ export const onRequestGet: PagesFunction<Env> = async (ctx) => {
       },
     }),
   })
+  log.info('google-tts:response', {
+    userId,
+    plan,
+    status: ggRes.status,
+    ok: ggRes.ok,
+    latencyMs: Date.now() - ggStartedAt,
+    requestId: ggRes.headers.get('x-request-id') || ggRes.headers.get('request-id') || '',
+    contentType: ggRes.headers.get('content-type') || '',
+  })
 
   if (!ggRes.ok) {
-    console.error('[google tts]', await ggRes.text())
-    log.fail('google tts failed', { stage: 'tts', userId, plan, provider: 'google' })
+    const ggBody = await ggRes.text()
+    console.error('[google tts]', ggBody)
+    log.fail('google tts failed', {
+      stage: 'tts',
+      userId,
+      plan,
+      provider: 'google',
+      status: ggRes.status,
+      bodyPreview: ggBody.slice(0, 400),
+    })
     return jsonError('语音合成失败', 500)
   }
 
   const ggJson = await ggRes.json() as { audioContent?: string }
   const b64 = ggJson.audioContent
+  log.info('google-tts:parsed', {
+    userId,
+    plan,
+    hasAudioContent: Boolean(b64),
+    audioContentLen: b64?.length || 0,
+  })
   if (!b64) {
     log.fail('google tts empty audioContent', { stage: 'tts', userId, plan, provider: 'google' })
     return jsonError('语音合成失败：空返回', 500)

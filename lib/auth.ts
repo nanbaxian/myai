@@ -26,6 +26,9 @@ export async function verifySupabaseJwt(req: Request, env: any): Promise<AuthUse
 
   const apiKey = String(env.SUPABASE_ANON_KEY || env.SUPABASE_SERVICE_KEY || '').trim()
   if (!apiKey) throw new Error('Missing SUPABASE_ANON_KEY or SUPABASE_SERVICE_KEY')
+  const reqId = Math.random().toString(36).slice(2, 10)
+  const startedAt = Date.now()
+  console.log(`[auth:supabase ${reqId}] request path=/auth/v1/user`)
 
   const userRes = await fetch(`${authBase}/user`, {
     method: 'GET',
@@ -35,14 +38,20 @@ export async function verifySupabaseJwt(req: Request, env: any): Promise<AuthUse
     },
     cf: { cacheTtl: 0, cacheEverything: false } as any,
   })
+  console.log(
+    `[auth:supabase ${reqId}] response status=${userRes.status} ok=${userRes.ok} ` +
+    `latency_ms=${Date.now() - startedAt}`
+  )
 
   if (!userRes.ok) {
     const detail = await userRes.text().catch(() => '')
+    console.error(`[auth:supabase ${reqId}] error body=${detail.slice(0, 300)}`)
     throw new Error(`Supabase auth rejected token: ${userRes.status}${detail ? ` ${detail.slice(0, 200)}` : ''}`)
   }
 
   const user = await userRes.json() as { id?: string; email?: string }
   if (!user?.id) throw new Error('Supabase auth returned invalid user payload')
+  console.log(`[auth:supabase ${reqId}] parsed hasUserId=${Boolean(user.id)}`)
 
   // Optional strict checks from token payload if provided in env.
   try {
@@ -60,4 +69,3 @@ export async function verifySupabaseJwt(req: Request, env: any): Promise<AuthUse
 
   return { userId: String(user.id), email: user.email }
 }
-
