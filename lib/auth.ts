@@ -22,6 +22,38 @@ function getBearerToken(req: Request): string | null {
   return m?.[1] ?? null
 }
 
+function derLength(len: number): Uint8Array {
+  if (len < 0x80) return Uint8Array.of(len)
+  if (len <= 0xff) return Uint8Array.of(0x81, len)
+  return Uint8Array.of(0x82, (len >> 8) & 0xff, len & 0xff)
+}
+
+function trimLeadingZeros(bytes: Uint8Array): Uint8Array {
+  let i = 0
+  while (i < bytes.length - 1 && bytes[i] === 0) i++
+  return bytes.subarray(i)
+}
+
+function joseEcdsaSigToDer(rawSig: Uint8Array): Uint8Array {
+  if (rawSig.length % 2 !== 0) throw new Error('Invalid ECDSA signature length')
+  const n = rawSig.length / 2
+  let r = trimLeadingZeros(rawSig.subarray(0, n))
+  let s = trimLeadingZeros(rawSig.subarray(n))
+  if (r[0] & 0x80) r = Uint8Array.of(0, ...r)
+  if (s[0] & 0x80) s = Uint8Array.of(0, ...s)
+
+  const rPart = Uint8Array.of(0x02, ...derLength(r.length), ...r)
+  const sPart = Uint8Array.of(0x02, ...derLength(s.length), ...s)
+  const seqLen = rPart.length + sPart.length
+  return Uint8Array.of(0x30, ...derLength(seqLen), ...rPart, ...sPart)
+}
+
+function pickHash(alg: string): 'SHA-256' | 'SHA-384' | 'SHA-512' {
+  if (alg.endsWith('384')) return 'SHA-384'
+  if (alg.endsWith('512')) return 'SHA-512'
+  return 'SHA-256'
+}
+
 export async function verifySupabaseJwt(req: Request, env: any): Promise<AuthUser> {
   const token = getBearerToken(req)
   if (!token) throw new Error('Missing Authorization Bearer token')
@@ -78,21 +110,38 @@ export async function verifySupabaseJwt(req: Request, env: any): Promise<AuthUse
   const jwk = (jwks.keys || []).find((k: any) => k.kid === kid)
   if (!jwk) throw new Error('No matching JWK')
 
-  const key = await crypto.subtle.importKey(
-    'jwk',
-    jwk,
-    { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' },
-    false,
-    ['verify']
-  )
+  const alg = String(header.alg || '')
+  const hash = pickHash(alg)
+  let importAlgo: AlgorithmIdentifier | RsaHashedImportParams | EcKeyImportParams
+  let verifyAlgo: AlgorithmIdentifier | RsaPssParams | EcdsaParams
+  let sigBytes = b64urlToUint8Array(s)
+
+  if (jwk.kty === 'RSA') {
+    if (alg.startsWith('PS')) {
+      importAlgo = { name: 'RSA-PSS', hash }
+      verifyAlgo = { name: 'RSA-PSS', saltLength: Number(alg.slice(2)) / 8 || 32 }
+    } else {
+      importAlgo = { name: 'RSASSA-PKCS1-v1_5', hash }
+      verifyAlgo = 'RSASSA-PKCS1-v1_5'
+    }
+  } else if (jwk.kty === 'EC') {
+    const namedCurve =
+      jwk.crv === 'P-256' ? 'P-256' :
+      jwk.crv === 'P-384' ? 'P-384' :
+      jwk.crv === 'P-521' ? 'P-521' :
+      (alg === 'ES256' ? 'P-256' : alg === 'ES384' ? 'P-384' : 'P-521')
+    importAlgo = { name: 'ECDSA', namedCurve }
+    verifyAlgo = { name: 'ECDSA', hash }
+    // JWT uses JOSE raw (R||S); WebCrypto ECDSA verify expects DER signature.
+    sigBytes = joseEcdsaSigToDer(sigBytes)
+  } else {
+    throw new Error(`Unsupported JWK key type: ${String(jwk.kty || 'unknown')} (alg=${alg || 'unknown'})`)
+  }
+
+  const key = await crypto.subtle.importKey('jwk', jwk, importAlgo, false, ['verify'])
 
   const enc = new TextEncoder()
-  const ok = await crypto.subtle.verify(
-    'RSASSA-PKCS1-v1_5',
-    key,
-    b64urlToUint8Array(s),
-    enc.encode(`${h}.${p}`)
-  )
+  const ok = await crypto.subtle.verify(verifyAlgo, key, sigBytes, enc.encode(`${h}.${p}`))
   if (!ok) throw new Error('Invalid JWT signature')
 
   const now = Math.floor(Date.now() / 1000)
