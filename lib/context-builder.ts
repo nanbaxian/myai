@@ -12,7 +12,7 @@ export function buildSystemPrompt(
   persona: Persona,
   memory: MemoryContext,
   latestUserText = '',
-  uiLanguage: ReplyLanguage = 'auto',
+  uiLanguage: ReplyLanguage = 'zh',
 ): string {
   const parts: string[] = []
 
@@ -139,7 +139,7 @@ function directQuestionGuide(latestUserText: string): string {
   ].join('\n')
 }
 
-function languageGuide(userText: string, uiLanguage: ReplyLanguage): string {
+function languageGuide(_userText: string, uiLanguage: ReplyLanguage): string {
   if (uiLanguage === 'en') {
     return [
       '- Highest priority: reply fully in natural English.',
@@ -154,34 +154,7 @@ function languageGuide(userText: string, uiLanguage: ReplyLanguage): string {
       '- Keep names and fixed terms as-is.',
     ].join('\n')
   }
-
-  const text = (userText || '').trim()
-  const lower = text.toLowerCase()
-
-  const forceEnglish =
-    /\b(english|in english|speak english|reply in english|use english)\b/.test(lower) ||
-    /英文|英语|用英语|請用英文|请用英文/.test(text)
-
-  if (forceEnglish) {
-    return [
-      '- Highest priority: reply fully in natural English.',
-      '- Do not switch to Chinese unless the user explicitly asks for Chinese.',
-      '- Keep names and fixed terms as-is.',
-    ].join('\n')
-  }
-
-  const hasCjk = /[\u4e00-\u9fff]/.test(text)
-  if (hasCjk) {
-    return [
-      '- Reply in Simplified Chinese by default.',
-      '- If user later asks for English, switch immediately and stay in English.',
-    ].join('\n')
-  }
-
-  return [
-    '- Reply in English by default for this turn.',
-    '- If user later asks for Chinese, switch immediately.',
-  ].join('\n')
+  return '- Reply in Simplified Chinese.'
 }
 
 function formatMid(s: MemorySnapshot): string {

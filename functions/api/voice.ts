@@ -36,8 +36,8 @@ interface Env {
   VOICE_KV: KVNamespace
 }
 
-type SttLanguage = 'auto' | 'zh' | 'en'
-type VoiceLanguage = 'auto' | 'zh' | 'en'
+type SttLanguage = 'zh' | 'en'
+type VoiceLanguage = 'zh' | 'en'
 
 const cors = {
   'Access-Control-Allow-Origin': '*',
@@ -108,18 +108,13 @@ function getDeepgramDetectedLanguage(dgJson: any): string {
 }
 
 function normalizeSttLanguage(v: unknown): SttLanguage {
-  if (v === 'zh' || v === 'en' || v === 'auto') return v
-  return 'auto'
+  if (v === 'zh' || v === 'en') return v
+  return 'zh'
 }
 
 function normalizeVoiceLanguage(v: unknown): VoiceLanguage {
-  if (v === 'zh' || v === 'en' || v === 'auto') return v
-  return 'auto'
-}
-
-function inferLanguageFromText(text: string): Exclude<VoiceLanguage, 'auto'> {
-  // Basic heuristic: if contains CJK chars, treat as Chinese, otherwise English.
-  return /[\u3400-\u9FFF]/.test(text) ? 'zh' : 'en'
+  if (v === 'zh' || v === 'en') return v
+  return 'zh'
 }
 
 // ================================================
@@ -149,7 +144,7 @@ export const onRequestPost: PagesFunction<Env> = async (ctx) => {
   let durationSeconds = 0
   let mimeType = 'audio/webm'
   let audioSource: 'r2' | 'multipart' = 'multipart'
-  let sttLanguage: SttLanguage = 'auto'
+  let sttLanguage: SttLanguage = 'zh'
 
   if (ct.includes('application/json')) {
     audioSource = 'r2'
@@ -214,10 +209,8 @@ export const onRequestPost: PagesFunction<Env> = async (ctx) => {
   dgUrl.searchParams.set('model', 'nova-2')
   dgUrl.searchParams.set('smart_format', 'true')
   dgUrl.searchParams.set('punctuate', 'true')
-  const detectLanguage = sttLanguage === 'auto'
   if (sttLanguage === 'zh') dgUrl.searchParams.set('language', 'zh')
   if (sttLanguage === 'en') dgUrl.searchParams.set('language', 'en')
-  if (detectLanguage) dgUrl.searchParams.set('detect_language', 'true')
   dgUrl.searchParams.set('utterances', 'true')
   dgUrl.searchParams.set('filler_words', 'false')
   log.info('deepgram:request', {
@@ -229,8 +222,8 @@ export const onRequestPost: PagesFunction<Env> = async (ctx) => {
     audioSeconds,
     model: 'nova-2',
     requestedLanguage: sttLanguage,
-    language: sttLanguage === 'auto' ? 'auto' : sttLanguage,
-    detectLanguage,
+    language: sttLanguage,
+    detectLanguage: false,
     utterances: true,
   })
 
@@ -337,9 +330,7 @@ export const onRequestGet: PagesFunction<Env> = async (ctx) => {
     log.fail('missing text', { stage: 'validate', userId })
     return jsonError('text 参数不能为空', 400)
   }
-  const resolvedVoiceLanguage = voiceLanguage === 'auto'
-    ? inferLanguageFromText(text)
-    : voiceLanguage
+  const resolvedVoiceLanguage = voiceLanguage
   const googleLanguageCode = resolvedVoiceLanguage === 'zh' ? 'cmn-CN' : 'en-US'
 
   // Free 配额检查

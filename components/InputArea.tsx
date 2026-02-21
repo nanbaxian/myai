@@ -332,7 +332,6 @@ export default function InputArea({
           title="Reply language"
           disabled={disabled}
         >
-          <option value="auto">Auto</option>
           <option value="zh">中文</option>
           <option value="en">English</option>
         </select>

@@ -18,7 +18,7 @@ export default function Home() {
   const [modal,    setModal]    = useState<Modal>(null)
   const [loading,  setLoading]  = useState(true)
   const [sidebarRefreshKey, setSidebarRefreshKey] = useState(0)
-  const [replyLanguage, setReplyLanguage] = useState<ReplyLanguage>('auto')
+  const [replyLanguage, setReplyLanguage] = useState<ReplyLanguage>('zh')
 
   // 启动时加载活跃人设
   useEffect(() => {

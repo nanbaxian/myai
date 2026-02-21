@@ -78,9 +78,9 @@ export const onRequestPost: PagesFunction<Env> = async (ctx) => {
   const { message = '', imageUrl } = body
   let { imageBase64 } = body
   const replyLanguage: ReplyLanguage =
-    body.replyLanguage === 'en' || body.replyLanguage === 'zh' || body.replyLanguage === 'auto'
+    body.replyLanguage === 'en' || body.replyLanguage === 'zh'
       ? body.replyLanguage
-      : 'auto'
+      : 'zh'
   if (!imageBase64 && imageUrl) {
     const r2 = await r2ImageUrlToBase64(env, imageUrl)
     if (r2?.base64) imageBase64 = r2.base64
