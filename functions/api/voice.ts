@@ -57,6 +57,17 @@ function withQuotaHeaders(resp: Response, plan: 'free' | 'pro', remaining?: numb
   return new Response(resp.body, { status: resp.status, headers: h })
 }
 
+function extractR2KeyFromUrl(audioUrl: string): string | null {
+  let path = audioUrl
+  try {
+    if (/^https?:\/\//i.test(audioUrl)) path = new URL(audioUrl).pathname
+  } catch {
+    return null
+  }
+  const m = path.match(/^\/r2\/([A-Za-z0-9\-]+)$/)
+  return m?.[1] ?? null
+}
+
 // ================================================
 // POST /api/voice — 语音转文字（Deepgram）
 // ================================================
@@ -93,14 +104,14 @@ export const onRequestPost: PagesFunction<Env> = async (ctx) => {
       log.fail('missing audioUrl', { stage: 'validate', userId })
       return jsonError('缺少 audioUrl', 400)
     }
-    const mm = audioUrl.match(/^\/r2\/([A-Za-z0-9\-]+)$/)
-    if (!mm) {
+    const r2Key = extractR2KeyFromUrl(audioUrl)
+    if (!r2Key) {
       log.fail('invalid audioUrl format', { stage: 'validate', userId })
       return jsonError('audioUrl 格式不正确', 400)
     }
-    const obj = await env.BUCKET.get(mm[1])
+    const obj = await env.BUCKET.get(r2Key)
     if (!obj) {
-      log.fail('audio not found in r2', { stage: 'r2:get', userId, key: mm[1] })
+      log.fail('audio not found in r2', { stage: 'r2:get', userId, key: r2Key })
       return jsonError('音频不存在', 404)
     }
     audioArrayBuffer = await obj.arrayBuffer()

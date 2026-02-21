@@ -73,10 +73,14 @@ export const onRequestPost: PagesFunction<Env> = async (ctx) => {
   })
   log.info('r2:put:ok', { userId, key })
   log.ok({ userId, key })
+  const origin = new URL(request.url).origin
+  const relativeUrl = `/r2/${key}`
+  const absoluteUrl = `${origin}${relativeUrl}`
 
   return new Response(JSON.stringify({
     key,
-    url: `/r2/${key}`,
+    url: absoluteUrl,
+    path: relativeUrl,
     contentType: file.type || 'application/octet-stream',
     size: file.size,
     name: file.name,

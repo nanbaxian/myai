@@ -20,11 +20,21 @@ interface Env {
 }
 
 
-async function r2ImageUrlToBase64(env: Env, imageUrl: string): Promise<{ base64: string; mime: string } | null> {
-  // Expect /r2/<key>
-  const m = imageUrl.match(/^\/r2\/([A-Za-z0-9\-]+)$/)
+function extractR2KeyFromUrl(imageUrl: string): string | null {
+  let path = imageUrl
+  try {
+    if (/^https?:\/\//i.test(imageUrl)) path = new URL(imageUrl).pathname
+  } catch {
+    return null
+  }
+  const m = path.match(/^\/r2\/([A-Za-z0-9\-]+)$/)
   if (!m) return null
-  const key = m[1]
+  return m[1]
+}
+
+async function r2ImageUrlToBase64(env: Env, imageUrl: string): Promise<{ base64: string; mime: string } | null> {
+  const key = extractR2KeyFromUrl(imageUrl)
+  if (!key) return null
   const obj = await env.BUCKET.get(key)
   if (!obj) return null
   const mime = obj.httpMetadata?.contentType || 'image/png'
