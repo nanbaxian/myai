@@ -81,6 +81,9 @@ class SupabaseRest {
 function daysAgo(n: number) {
   return new Date(Date.now() - n * 86_400_000).toISOString()
 }
+function hoursAgo(n: number) {
+  return new Date(Date.now() - n * 3_600_000).toISOString()
+}
 
 function parseSnap(s: Record<string, unknown>): MemorySnapshot {
   return {
@@ -161,7 +164,7 @@ export async function loadMemoryContext(
   cfAi?: Ai,
 ): Promise<MemoryContext> {
   const db          = new SupabaseRest(supabaseUrl, supabaseKey)
-  const shortCutoff = daysAgo(3)
+  const shortCutoff = hoursAgo(12)
   const midCutoff   = daysAgo(30)
 
   // 短期消息过滤：若有 personaId，只取该人设的消息
@@ -170,7 +173,7 @@ export async function loadMemoryContext(
     'created_at': `gte.${shortCutoff}`,
     // Fetch latest N then reorder to chronological before returning.
     order: 'created_at.desc',
-    limit: '12',
+    limit: '8',
   }
   if (personaId) shortMsgParams['persona_id'] = `eq.${personaId}`
 

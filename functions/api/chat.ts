@@ -82,10 +82,18 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
 
   // ② 加载记忆（传入当前消息做语义搜索，优先用 Workers AI binding 生成向量）
   const memory = await loadMemoryContext(sbUrl, sbKey, message || undefined, env.DEEPINFRA_API_KEY, persona.id, env.AI)
+  // Stabilize turn-following: only keep short-term dialogue context for generation.
+  const memoryForPrompt = {
+    ...memory,
+    coreMemories: [],
+    midTermSummary: [],
+    longTermFragments: [],
+    semanticMatches: [],
+  }
 
   // ③ 构建 prompt 和消息历史
-  const systemPrompt = buildSystemPrompt(persona, memory, message || '', replyLanguage)
-  const messages     = buildMessageHistory(memory, message, imageBase64)
+  const systemPrompt = buildSystemPrompt(persona, memoryForPrompt, message || '', replyLanguage)
+  const messages     = buildMessageHistory(memoryForPrompt, message, imageBase64)
   if (debug) {
     console.log(
       `[chat ${reqId}] persona=${persona.id} short=${memory.shortTermMessages.length} ` +

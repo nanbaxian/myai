@@ -160,7 +160,7 @@ export function buildMessageHistory(
 ): Array<{ role: 'user' | 'model'; parts: Array<{ text: string } | { inlineData: { mimeType: string; data: string } }> }> {
   const history = memory.shortTermMessages
     .filter((msg: DbMessage) => Boolean((msg.content || '').trim()))
-    .slice(-8)
+    .slice(-4)
     .map((msg: DbMessage) => ({
       role: (msg.role === 'user' ? 'user' : 'model') as 'user' | 'model',
       parts: [{ text: msg.content || '(image)' }],
