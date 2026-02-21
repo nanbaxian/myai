@@ -36,6 +36,8 @@ interface Env {
   VOICE_KV: KVNamespace
 }
 
+type SttLanguage = 'auto' | 'zh' | 'en'
+
 const cors = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
@@ -96,6 +98,19 @@ function extractDeepgramTranscript(dgJson: any): string {
   return ''
 }
 
+function getDeepgramDetectedLanguage(dgJson: any): string {
+  return String(
+    dgJson?.results?.channels?.[0]?.detected_language ??
+    dgJson?.results?.channels?.[0]?.alternatives?.[0]?.languages?.[0] ??
+    ''
+  ).trim()
+}
+
+function normalizeSttLanguage(v: unknown): SttLanguage {
+  if (v === 'zh' || v === 'en' || v === 'auto') return v
+  return 'auto'
+}
+
 // ================================================
 // POST /api/voice — 语音转文字（Deepgram）
 // ================================================
@@ -123,12 +138,14 @@ export const onRequestPost: PagesFunction<Env> = async (ctx) => {
   let durationSeconds = 0
   let mimeType = 'audio/webm'
   let audioSource: 'r2' | 'multipart' = 'multipart'
+  let sttLanguage: SttLanguage = 'auto'
 
   if (ct.includes('application/json')) {
     audioSource = 'r2'
     const body = await request.json().catch(() => null as any)
     const audioUrl = body?.audioUrl as string | undefined
     durationSeconds = Number(body?.durationSeconds || 0)
+    sttLanguage = normalizeSttLanguage(body?.replyLanguage)
 
     if (!audioUrl) {
       log.fail('missing audioUrl', { stage: 'validate', userId })
@@ -186,8 +203,10 @@ export const onRequestPost: PagesFunction<Env> = async (ctx) => {
   dgUrl.searchParams.set('model', 'nova-2')
   dgUrl.searchParams.set('smart_format', 'true')
   dgUrl.searchParams.set('punctuate', 'true')
-  dgUrl.searchParams.set('language', 'zh')
-  dgUrl.searchParams.set('detect_language', 'true')
+  const detectLanguage = sttLanguage === 'auto'
+  if (sttLanguage === 'zh') dgUrl.searchParams.set('language', 'zh')
+  if (sttLanguage === 'en') dgUrl.searchParams.set('language', 'en')
+  if (detectLanguage) dgUrl.searchParams.set('detect_language', 'true')
   dgUrl.searchParams.set('utterances', 'true')
   dgUrl.searchParams.set('filler_words', 'false')
   log.info('deepgram:request', {
@@ -198,8 +217,9 @@ export const onRequestPost: PagesFunction<Env> = async (ctx) => {
     bytes: audioArrayBuffer?.byteLength || 0,
     audioSeconds,
     model: 'nova-2',
-    language: 'zh',
-    detectLanguage: true,
+    requestedLanguage: sttLanguage,
+    language: sttLanguage === 'auto' ? 'auto' : sttLanguage,
+    detectLanguage,
     utterances: true,
   })
 
@@ -232,6 +252,7 @@ export const onRequestPost: PagesFunction<Env> = async (ctx) => {
   const wordsCount = Array.isArray(alt?.words) ? alt.words.length : 0
   const utterancesCount = Array.isArray(dgJson?.results?.utterances) ? dgJson.results.utterances.length : 0
   const directTranscript = String(alt?.transcript ?? '').trim()
+  const detectedLanguage = getDeepgramDetectedLanguage(dgJson)
   log.info('deepgram:response', {
     userId,
     plan,
@@ -241,6 +262,7 @@ export const onRequestPost: PagesFunction<Env> = async (ctx) => {
     channels: Array.isArray(dgJson?.results?.channels) ? dgJson.results.channels.length : 0,
     wordsCount,
     utterancesCount,
+    detectedLanguage,
     directTranscriptLen: directTranscript.length,
     directTranscriptPreview: directTranscript.slice(0, 80),
   })

@@ -186,7 +186,11 @@ export default function InputArea({
                 'Content-Type': 'application/json',
                 Authorization: `Bearer ${token}`,
               },
-              body: JSON.stringify({ audioUrl: up.url, durationSeconds: Math.ceil(Math.max(1, Math.floor(durationMs)) / 1000) }),
+              body: JSON.stringify({
+                audioUrl: up.url,
+                durationSeconds: Math.ceil(Math.max(1, Math.floor(durationMs)) / 1000),
+                replyLanguage,
+              }),
               
             })
             if (!res.ok) throw new Error('STT error')
@@ -215,7 +219,7 @@ export default function InputArea({
         alert('无法访问麦克风，请在浏览器设置中允许麦克风权限')
       }
     }
-  }, [isRecording])
+  }, [isRecording, replyLanguage])
 
   // ================================================
   // 图片上传 + 压缩
