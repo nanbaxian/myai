@@ -354,6 +354,9 @@ async function extractCoreMemories(db: SupabaseRest, cutoff: string, apiKey: str
 // 工具
 // ================================================
 async function callGemini(apiKey: string, prompt: string): Promise<string> {
+  const startedAt = Date.now()
+  const reqId = Math.random().toString(36).slice(2, 10)
+  console.log(`[memory:deepinfra ${reqId}] start prompt_chars=${prompt.length}`)
   const url = 'https://api.deepinfra.com/v1/openai/chat/completions'
   const res = await fetch(url, {
     method: 'POST',
@@ -368,9 +371,19 @@ async function callGemini(apiKey: string, prompt: string): Promise<string> {
       messages: [{ role: 'user', content: prompt }],
     }),
   })
-  if (!res.ok) throw new Error(`DeepInfra ${res.status}: ${await res.text()}`)
+  console.log(
+    `[memory:deepinfra ${reqId}] upstream status=${res.status} ok=${res.ok} ` +
+    `latency_ms=${Date.now() - startedAt}`
+  )
+  if (!res.ok) {
+    const err = await res.text()
+    console.error(`[memory:deepinfra ${reqId}] upstream error body=${err.slice(0, 600)}`)
+    throw new Error(`DeepInfra ${res.status}: ${err}`)
+  }
   const data = await res.json() as { choices?: Array<{ message?: { content?: string } }> }
-  return data?.choices?.[0]?.message?.content ?? ''
+  const text = data?.choices?.[0]?.message?.content ?? ''
+  console.log(`[memory:deepinfra ${reqId}] done output_chars=${text.length}`)
+  return text
 }
 
 function parseCompression(text: string) {

@@ -46,6 +46,10 @@ interface GoogleContent {
   parts: GooglePart[]
 }
 
+function getHeader(h: Headers, name: string): string {
+  return h.get(name) || ''
+}
+
 function mapGeminiToOpenAI(messages: GeminiMessage[], systemPrompt: string): OpenAIMessage[] {
   const mapped: OpenAIMessage[] = [{ role: 'system', content: systemPrompt }]
   for (const m of messages) {
@@ -144,7 +148,7 @@ export async function streamGemini(
       .filter(p => 'inlineData' in p && Boolean(p.inlineData?.data)).length
     console.log(
       `[deepinfra ${reqId}] start model=${model} max_tokens=${maxOutputTokens} coalesce=${coalesceChars} ` +
-      `msg_count=${messages.length} input_chars=${inputChars} image_parts=${imageParts}`
+      `msg_count=${messages.length} input_chars=${inputChars} image_parts=${imageParts} system_chars=${systemPrompt.length}`
     )
   }
 
@@ -161,7 +165,9 @@ export async function streamGemini(
   if (debug) {
     console.log(
       `[deepinfra ${reqId}] upstream status=${upstream.status} ok=${upstream.ok} ` +
-      `fetch_ms=${Date.now() - startedAt}`
+      `fetch_ms=${Date.now() - startedAt} ` +
+      `req_header_id=${getHeader(upstream.headers, 'x-request-id') || getHeader(upstream.headers, 'request-id')} ` +
+      `content_type=${getHeader(upstream.headers, 'content-type')}`
     )
   }
 
@@ -179,6 +185,17 @@ export async function streamGemini(
     })
   }
 
+  if (!upstream.body) {
+    if (debug) console.error(`[deepinfra ${reqId}] upstream body is null`)
+    return new ReadableStream({
+      start(ctrl) {
+        ctrl.enqueue(encoder.encode(`data: ${JSON.stringify({ error: 'upstream body is empty' })}\n\n`))
+        ctrl.enqueue(encoder.encode(`data: ${JSON.stringify({ done: true, full: '' })}\n\n`))
+        ctrl.close()
+      },
+    })
+  }
+
   let fullText = ''
   let doneSent = false
   let lineBuffer = ''
@@ -189,7 +206,7 @@ export async function streamGemini(
   let pendingText = ''
   const emitText = (ctrl: TransformStreamDefaultController<Uint8Array>, force = false) => {
     if (!pendingText) return
-    const shouldFlushByPunc = /[，。！？,.!?;；:：\n]$/.test(pendingText)
+    const shouldFlushByPunc = /[\uFF0C\u3002\uFF01\uFF1F,.!?;\uFF1B:\uFF1A\n]$/.test(pendingText)
     if (force || pendingText.length >= coalesceChars || shouldFlushByPunc) {
       emitCount += 1
       if (debug && (emitCount <= 3 || force)) {
@@ -221,6 +238,12 @@ export async function streamGemini(
             }
             emitText(ctrl, true)
             ctrl.enqueue(encoder.encode(`data: ${JSON.stringify({ done: true, full: fullText })}\n\n`))
+            if (debug) {
+              console.log(
+                `[deepinfra ${reqId}] done via [DONE] full_len=${fullText.length} events=${eventCount} ` +
+                `emits=${emitCount} parse_errors=${parseErrorCount} total_ms=${Date.now() - startedAt}`
+              )
+            }
           }
           continue
         }
@@ -257,6 +280,12 @@ export async function streamGemini(
             }
             emitText(ctrl, true)
             ctrl.enqueue(encoder.encode(`data: ${JSON.stringify({ done: true, full: fullText })}\n\n`))
+            if (debug) {
+              console.log(
+                `[deepinfra ${reqId}] done via finish_reason=${finishReason} full_len=${fullText.length} ` +
+                `events=${eventCount} emits=${emitCount} parse_errors=${parseErrorCount} total_ms=${Date.now() - startedAt}`
+              )
+            }
           }
         } catch {
           parseErrorCount += 1
@@ -282,7 +311,7 @@ export async function streamGemini(
     },
   })
 
-  return upstream.body!.pipeThrough(transform)
+  return upstream.body.pipeThrough(transform)
 }
 
 export async function streamGeminiFlashLite(
@@ -319,7 +348,7 @@ export async function streamGeminiFlashLite(
       .filter(p => 'inlineData' in p && Boolean(p.inlineData?.data)).length
     console.log(
       `[gemini ${reqId}] start model=${model} max_tokens=${maxOutputTokens} coalesce=${coalesceChars} ` +
-      `msg_count=${messages.length} input_chars=${inputChars} image_parts=${imageParts}`
+      `msg_count=${messages.length} input_chars=${inputChars} image_parts=${imageParts} system_chars=${systemPrompt.length}`
     )
   }
 
@@ -333,7 +362,9 @@ export async function streamGeminiFlashLite(
   if (debug) {
     console.log(
       `[gemini ${reqId}] upstream status=${upstream.status} ok=${upstream.ok} ` +
-      `fetch_ms=${Date.now() - startedAt}`
+      `fetch_ms=${Date.now() - startedAt} ` +
+      `req_header_id=${getHeader(upstream.headers, 'x-request-id') || getHeader(upstream.headers, 'request-id')} ` +
+      `content_type=${getHeader(upstream.headers, 'content-type')}`
     )
   }
 
@@ -349,14 +380,33 @@ export async function streamGeminiFlashLite(
     })
   }
 
+  if (!upstream.body) {
+    if (debug) console.error(`[gemini ${reqId}] upstream body is null`)
+    return new ReadableStream({
+      start(ctrl) {
+        ctrl.enqueue(encoder.encode(`data: ${JSON.stringify({ error: 'upstream body is empty' })}\n\n`))
+        ctrl.enqueue(encoder.encode(`data: ${JSON.stringify({ done: true, full: '' })}\n\n`))
+        ctrl.close()
+      },
+    })
+  }
+
   let fullText = ''
   let doneSent = false
   let lineBuffer = ''
   let pendingText = ''
+  let eventCount = 0
+  let parseErrorCount = 0
+  let emitCount = 0
+  let firstTokenAt = 0
   const emitText = (ctrl: TransformStreamDefaultController<Uint8Array>, force = false) => {
     if (!pendingText) return
-    const shouldFlushByPunc = /[，。！？,.!?;；:：\n]$/.test(pendingText)
+    const shouldFlushByPunc = /[\uFF0C\u3002\uFF01\uFF1F,.!?;\uFF1B:\uFF1A\n]$/.test(pendingText)
     if (force || pendingText.length >= coalesceChars || shouldFlushByPunc) {
+      emitCount += 1
+      if (debug && (emitCount <= 3 || force)) {
+        console.log(`[gemini ${reqId}] emit #${emitCount} chars=${pendingText.length} force=${force}`)
+      }
       ctrl.enqueue(encoder.encode(`data: ${JSON.stringify({ text: pendingText })}\n\n`))
       pendingText = ''
     }
@@ -377,27 +427,49 @@ export async function streamGeminiFlashLite(
             doneSent = true
             emitText(ctrl, true)
             ctrl.enqueue(encoder.encode(`data: ${JSON.stringify({ done: true, full: fullText })}\n\n`))
+            if (debug) {
+              console.log(
+                `[gemini ${reqId}] done via [DONE] full_len=${fullText.length} events=${eventCount} ` +
+                `emits=${emitCount} parse_errors=${parseErrorCount} total_ms=${Date.now() - startedAt}`
+              )
+            }
           }
           continue
         }
 
         try {
+          eventCount += 1
           const parsed = JSON.parse(raw)
           const piece = extractGeminiChunkText(parsed)
           if (piece) {
+            if (!firstTokenAt) {
+              firstTokenAt = Date.now()
+              if (debug) console.log(`[gemini ${reqId}] first_token_ms=${firstTokenAt - startedAt}`)
+            }
             fullText += piece
             pendingText += piece
             emitText(ctrl)
           }
           const finishReason =
             (parsed as { candidates?: Array<{ finishReason?: string }> })?.candidates?.[0]?.finishReason ?? ''
+          if (debug && (eventCount <= 3 || finishReason)) {
+            console.log(
+              `[gemini ${reqId}] event=${eventCount} piece_len=${piece.length} finish=${finishReason || 'none'}`
+            )
+          }
           if (finishReason && !doneSent) {
             doneSent = true
             emitText(ctrl, true)
             ctrl.enqueue(encoder.encode(`data: ${JSON.stringify({ done: true, full: fullText })}\n\n`))
+            if (debug) {
+              console.log(
+                `[gemini ${reqId}] done via finish_reason=${finishReason} full_len=${fullText.length} ` +
+                `events=${eventCount} emits=${emitCount} parse_errors=${parseErrorCount} total_ms=${Date.now() - startedAt}`
+              )
+            }
           }
         } catch {
-          // Ignore broken chunk.
+          parseErrorCount += 1
         }
       }
     },
@@ -405,9 +477,16 @@ export async function streamGeminiFlashLite(
       if (!doneSent) {
         emitText(ctrl, true)
         ctrl.enqueue(encoder.encode(`data: ${JSON.stringify({ done: true, full: fullText })}\n\n`))
+        if (debug) {
+          console.log(
+            `[gemini ${reqId}] done via flush full_len=${fullText.length} events=${eventCount} ` +
+            `emits=${emitCount} parse_errors=${parseErrorCount} total_ms=${Date.now() - startedAt}`
+          )
+        }
       }
     },
   })
 
-  return upstream.body!.pipeThrough(transform)
+  return upstream.body.pipeThrough(transform)
 }
+

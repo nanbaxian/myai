@@ -64,8 +64,36 @@ function extractR2KeyFromUrl(audioUrl: string): string | null {
   } catch {
     return null
   }
-  const m = path.match(/^\/r2\/([A-Za-z0-9\-]+)$/)
+  const m = path.match(/^\/r2\/([^/?#]+)$/)
   return m?.[1] ?? null
+}
+
+function extractDeepgramTranscript(dgJson: any): string {
+  const alt = dgJson?.results?.channels?.[0]?.alternatives?.[0]
+  const direct = String(alt?.transcript ?? '').trim()
+  if (direct) return direct
+
+  const words = Array.isArray(alt?.words) ? alt.words : []
+  if (words.length > 0) {
+    const byWords = words
+      .map((w: any) => String(w?.punctuated_word ?? w?.word ?? '').trim())
+      .filter(Boolean)
+      .join(' ')
+      .trim()
+    if (byWords) return byWords
+  }
+
+  const utterances = Array.isArray(dgJson?.results?.utterances) ? dgJson.results.utterances : []
+  if (utterances.length > 0) {
+    const byUtterances = utterances
+      .map((u: any) => String(u?.transcript ?? '').trim())
+      .filter(Boolean)
+      .join(' ')
+      .trim()
+    if (byUtterances) return byUtterances
+  }
+
+  return ''
 }
 
 // ================================================
@@ -94,8 +122,10 @@ export const onRequestPost: PagesFunction<Env> = async (ctx) => {
   let audioArrayBuffer: ArrayBuffer | null = null
   let durationSeconds = 0
   let mimeType = 'audio/webm'
+  let audioSource: 'r2' | 'multipart' = 'multipart'
 
   if (ct.includes('application/json')) {
+    audioSource = 'r2'
     const body = await request.json().catch(() => null as any)
     const audioUrl = body?.audioUrl as string | undefined
     durationSeconds = Number(body?.durationSeconds || 0)
@@ -157,7 +187,21 @@ export const onRequestPost: PagesFunction<Env> = async (ctx) => {
   dgUrl.searchParams.set('smart_format', 'true')
   dgUrl.searchParams.set('punctuate', 'true')
   dgUrl.searchParams.set('language', 'zh')
+  dgUrl.searchParams.set('detect_language', 'true')
+  dgUrl.searchParams.set('utterances', 'true')
   dgUrl.searchParams.set('filler_words', 'false')
+  log.info('deepgram:request', {
+    userId,
+    plan,
+    source: audioSource,
+    mimeType,
+    bytes: audioArrayBuffer?.byteLength || 0,
+    audioSeconds,
+    model: 'nova-2',
+    language: 'zh',
+    detectLanguage: true,
+    utterances: true,
+  })
 
   const dgRes = await fetch(dgUrl.toString(), {
     method: 'POST',
@@ -169,13 +213,38 @@ export const onRequestPost: PagesFunction<Env> = async (ctx) => {
   })
 
   if (!dgRes.ok) {
-    console.error('[deepgram]', await dgRes.text())
-    log.fail('deepgram failed', { stage: 'stt', userId, plan })
+    const body = await dgRes.text()
+    console.error('[deepgram]', body)
+    log.fail('deepgram failed', {
+      stage: 'stt',
+      userId,
+      plan,
+      status: dgRes.status,
+      statusText: dgRes.statusText,
+      requestId: dgRes.headers.get('x-request-id') || dgRes.headers.get('dg-request-id') || '',
+      bodyPreview: body.slice(0, 400),
+    })
     return jsonError('语音识别失败', 500)
   }
 
   const dgJson = await dgRes.json() as any
-  const text = dgJson?.results?.channels?.[0]?.alternatives?.[0]?.transcript ?? ''
+  const alt = dgJson?.results?.channels?.[0]?.alternatives?.[0]
+  const wordsCount = Array.isArray(alt?.words) ? alt.words.length : 0
+  const utterancesCount = Array.isArray(dgJson?.results?.utterances) ? dgJson.results.utterances.length : 0
+  const directTranscript = String(alt?.transcript ?? '').trim()
+  log.info('deepgram:response', {
+    userId,
+    plan,
+    status: dgRes.status,
+    requestId: dgRes.headers.get('x-request-id') || dgRes.headers.get('dg-request-id') || '',
+    metadataDuration: Number(dgJson?.metadata?.duration || 0),
+    channels: Array.isArray(dgJson?.results?.channels) ? dgJson.results.channels.length : 0,
+    wordsCount,
+    utterancesCount,
+    directTranscriptLen: directTranscript.length,
+    directTranscriptPreview: directTranscript.slice(0, 80),
+  })
+  const text = extractDeepgramTranscript(dgJson)
 
   // 计费：free 扣配额
   if (plan === 'free') {
@@ -183,10 +252,24 @@ export const onRequestPost: PagesFunction<Env> = async (ctx) => {
     remaining = r.remaining
   }
 
-  const res = new Response(JSON.stringify({ text: String(text).trim() }), {
+  if (!text) {
+    log.fail('empty transcript', {
+      stage: 'stt-empty',
+      userId,
+      plan,
+      audioSeconds,
+      mimeType,
+      bytes: audioArrayBuffer?.byteLength || 0,
+      wordsCount,
+      utterancesCount,
+    })
+    return withQuotaHeaders(jsonError('未识别到语音内容，请重试或录制更清晰音频', 422), plan, plan === 'free' ? remaining : undefined)
+  }
+
+  const res = new Response(JSON.stringify({ text }), {
     headers: { ...cors, 'Content-Type': 'application/json' },
   })
-  log.ok({ userId, plan, transcriptLen: String(text).trim().length })
+  log.ok({ userId, plan, transcriptLen: text.length })
   return withQuotaHeaders(res, plan, plan === 'free' ? remaining : undefined)
 }
 
