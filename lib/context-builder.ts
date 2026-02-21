@@ -32,6 +32,7 @@ export function buildSystemPrompt(
   const goodMatches = (memory.semanticMatches ?? [])
     .filter(s => (s.similarity ?? 0) > 0.82)
     .slice(0, 2)
+  const hasRelevantMemory = goodMatches.length > 0
   if (goodMatches.length > 0) {
     const list = goodMatches
       .map(s => `- ${s.summary_text} (relevance ${Math.round((s.similarity ?? 0) * 100)}%)`)
@@ -60,6 +61,7 @@ export function buildSystemPrompt(
     parts.push(`# Distant Fragments\n${list}`)
   }
 
+  parts.push(`# Memory Usage\n${memoryUsageGuide(hasRelevantMemory)}`)
   parts.push(`# Style Guide\n${styleGuide(persona.reply_style)}`)
 
   return parts.join('\n\n---\n\n')
@@ -134,10 +136,24 @@ function formatMid(s: MemorySnapshot): string {
     : `I seem to remember: ${s.summary_text} (details are a bit fuzzy)`
 }
 
+function memoryUsageGuide(hasRelevantMemory: boolean): string {
+  if (!hasRelevantMemory) {
+    return [
+      '- Treat memory as hidden context.',
+      '- Do not explicitly mention memory, remembering, past chats, or "I remember" phrasing.',
+      '- Focus on the latest user message directly.',
+    ].join('\n')
+  }
+
+  return [
+    '- Use memory only if it is directly helpful to the latest user message.',
+    '- Keep memory references subtle and natural; at most once in a reply.',
+    '- Never let memory references replace direct response to the latest user message.',
+  ].join('\n')
+}
+
 function styleGuide(style: string): string {
   const base = `- Stay in character and keep a natural conversation tone
-- For medium-term memory, use uncertain phrasing like "I remember" or "I think"
-- For long-term memory, use even fuzzier phrasing like "maybe"
 - Avoid bullet-point style in final user-facing replies
 - Never repeat self-introduction unless user explicitly asks who you are
 - Do not echo the user's sentence verbatim; move the conversation forward
