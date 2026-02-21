@@ -17,6 +17,7 @@ export function buildSystemPrompt(
   const parts: string[] = []
 
   parts.push(`# Current Turn Anchor\n${turnAnchor(latestUserText)}`)
+  parts.push(`# Fact Priority\n${factPriorityGuide(latestUserText)}`)
   parts.push(`# Response Language\n${languageGuide(latestUserText, uiLanguage)}`)
   parts.push(`# Persona\n${persona.prompt}`)
 
@@ -81,8 +82,29 @@ function turnAnchor(latestUserText: string): string {
     '- First sentence must directly respond to the user\'s latest message.',
     '- Never ignore the latest message.',
     '- If older context is not relevant to the latest message, ignore it.',
+    '- If the latest message already includes concrete facts, do not ask the same fact again.',
     '- Do not restart the conversation or repeat fixed intro lines.',
     `- Latest user message: """${latest.slice(0, 600)}"""`,
+  ].join('\n')
+}
+
+function factPriorityGuide(latestUserText: string): string {
+  const t = (latestUserText || '').trim()
+  const hasTimeOrTimezone =
+    /(\b\d{1,2}:\d{2}\s?(am|pm)?\b|多伦多|Toronto|时区|timezone|几点|时间)/i.test(t)
+
+  if (!hasTimeOrTimezone) {
+    return [
+      '- Treat user-provided facts in the latest message as authoritative for this turn.',
+      '- Do not invent conflicting facts.',
+    ].join('\n')
+  }
+
+  return [
+    '- User provided time/timezone details in the latest message; accept them as authoritative.',
+    '- Do not switch the user to another timezone unless the user explicitly asks for conversion.',
+    '- If conversion is requested and the target timezone is missing, ask one short clarification.',
+    '- Avoid back-questioning facts that the user just stated (time/location).',
   ].join('\n')
 }
 
