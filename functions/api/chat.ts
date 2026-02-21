@@ -118,8 +118,8 @@ export const onRequestPost: PagesFunction<Env> = async (ctx) => {
 
   // ③ 构建 prompt 和消息历史
   const hardLanguageRule = replyLanguage === 'en'
-    ? '\n\n# Hard Language Lock\n- You must reply entirely in English.\n- Do not use Chinese characters.'
-    : '\n\n# Hard Language Lock\n- 你必须完全使用简体中文回复。\n- 不要使用英文句子（专有名词除外）。'
+    ? '\n\n# Hard Language Lock\n- You must reply entirely in English.\n- Do not use Chinese characters.\n- Do not call the user by the assistant persona name.'
+    : '\n\n# Hard Language Lock\n- 你必须完全使用简体中文回复。\n- 不要使用英文句子（专有名词除外）。\n- 不要把助手人设名字当作用户称呼。'
   const systemPrompt = buildSystemPrompt(persona, memoryForPrompt, message || '', replyLanguage) + hardLanguageRule
   const messages     = buildMessageHistory(memoryForPrompt, message, imageBase64)
   if (debug) {

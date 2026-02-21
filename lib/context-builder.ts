@@ -21,6 +21,7 @@ export function buildSystemPrompt(
   parts.push(`# Direct Question Handling\n${directQuestionGuide(latestUserText)}`)
   parts.push(`# Response Language\n${languageGuide(latestUserText, uiLanguage)}`)
   parts.push(`# Persona\n${persona.prompt}`)
+  parts.push(`# Role Boundaries\n${roleBoundaryGuide(persona.name)}`)
 
   if (memory.coreMemories.length > 0) {
     const list = [...memory.coreMemories]
@@ -192,6 +193,15 @@ function styleGuide(style: string): string {
     long: '- You may elaborate more, but keep dialogue flow natural.',
   }
   return base + '\n' + (tips[style] ?? tips.medium)
+}
+
+function roleBoundaryGuide(personaName: string): string {
+  const safeName = (personaName || '').trim() || 'assistant'
+  return [
+    `- You are "${safeName}". This name refers to the assistant identity, not the user.`,
+    `- Never address the user as "${safeName}" unless the user explicitly asks you to call them that.`,
+    '- Default user address should be neutral (e.g., "you"), and avoid assigning user names without explicit confirmation.',
+  ].join('\n')
 }
 
 // ================================================
