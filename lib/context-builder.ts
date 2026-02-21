@@ -197,6 +197,7 @@ function selectRelevantShortHistory(messages: DbMessage[], latestUserText: strin
 
   const latest = (latestUserText || '').trim()
   if (!latest) return recent.slice(-4)
+  if (isLikelyFollowUp(latest)) return recent.slice(-4)
 
   const queryTokens = tokenizeForTopic(latest)
   if (queryTokens.size === 0) return []
@@ -217,6 +218,22 @@ function selectRelevantShortHistory(messages: DbMessage[], latestUserText: strin
     .sort((a, b) => a.idx - b.idx)
     .slice(-4)
     .map(x => x.msg)
+}
+
+function isLikelyFollowUp(text: string): boolean {
+  const t = (text || '').trim().toLowerCase()
+  if (!t) return false
+
+  // Very short replies are usually dependent on previous turn.
+  if (t.length <= 8) return true
+
+  // Common Chinese follow-up cues.
+  if (/(那你|你呢|然后呢|还有呢|是吗|有吗|咋样|怎么样|为啥|为什么|什么意思|哪个|这个|那个)/.test(t)) return true
+
+  // Common English follow-up cues.
+  if (/^(what about|and you|why|how so|which one|this|that)/.test(t)) return true
+
+  return false
 }
 
 function topicOverlap(queryTokens: Set<string>, text: string): number {
