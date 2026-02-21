@@ -168,8 +168,9 @@ export async function loadMemoryContext(
   const shortMsgParams: Record<string, string> = {
     select: 'id,role,content,content_type,image_url,created_at',
     'created_at': `gte.${shortCutoff}`,
-    order: 'created_at.asc',
-    limit: '10',
+    // Fetch latest N then reorder to chronological before returning.
+    order: 'created_at.desc',
+    limit: '12',
   }
   if (personaId) shortMsgParams['persona_id'] = `eq.${personaId}`
 
@@ -203,11 +204,13 @@ export async function loadMemoryContext(
     }
   }
 
+  const shortTermMessages = [...shorts].reverse()
+
   return {
     coreMemories:      core,
     midTermSummary:    parsedSnaps.filter(s => s.tier === 'mid' && s.period_end >= midCutoff),
     longTermFragments: parsedSnaps.filter(s => s.tier === 'long'),
-    shortTermMessages: shorts,
+    shortTermMessages,
     semanticMatches,
   }
 }

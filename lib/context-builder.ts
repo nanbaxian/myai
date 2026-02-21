@@ -140,6 +140,7 @@ function styleGuide(style: string): string {
 - For long-term memory, use even fuzzier phrasing like "maybe"
 - Avoid bullet-point style in final user-facing replies
 - Never repeat self-introduction unless user explicitly asks who you are
+- Do not echo the user's sentence verbatim; move the conversation forward
 - If user sends an image, describe it naturally and tie it to the conversation`
   const tips: Record<string, string> = {
     short: '- Keep it brief (1-3 sentences) and conversational.',

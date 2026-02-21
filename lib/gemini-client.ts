@@ -92,7 +92,7 @@ export async function streamGemini(
   const payload = {
     model,
     stream: true,
-    temperature: 0.7,
+    temperature: 0.35,
     max_tokens: maxOutputTokens,
     messages: mapGeminiToOpenAI(messages, systemPrompt),
   }
