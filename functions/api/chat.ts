@@ -88,7 +88,6 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     coreMemories: [],
     midTermSummary: [],
     longTermFragments: [],
-    semanticMatches: [],
   }
 
   // ③ 构建 prompt 和消息历史

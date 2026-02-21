@@ -80,6 +80,7 @@ function turnAnchor(latestUserText: string): string {
   return [
     '- First sentence must directly respond to the user\'s latest message.',
     '- Never ignore the latest message.',
+    '- If older context is not relevant to the latest message, ignore it.',
     '- Do not restart the conversation or repeat fixed intro lines.',
     `- Latest user message: """${latest.slice(0, 600)}"""`,
   ].join('\n')
@@ -174,9 +175,7 @@ export function buildMessageHistory(
   userText: string,
   imageBase64?: string,
 ): Array<{ role: 'user' | 'model'; parts: Array<{ text: string } | { inlineData: { mimeType: string; data: string } }> }> {
-  const history = memory.shortTermMessages
-    .filter((msg: DbMessage) => Boolean((msg.content || '').trim()))
-    .slice(-4)
+  const history = selectRelevantShortHistory(memory.shortTermMessages, userText)
     .map((msg: DbMessage) => ({
       role: (msg.role === 'user' ? 'user' : 'model') as 'user' | 'model',
       parts: [{ text: msg.content || '(image)' }],
@@ -189,4 +188,58 @@ export function buildMessageHistory(
   parts.push({ text: userText || 'Please describe this image.' })
 
   return [...history, { role: 'user' as const, parts }]
+}
+
+function selectRelevantShortHistory(messages: DbMessage[], latestUserText: string): DbMessage[] {
+  const recent = messages
+    .filter((m: DbMessage) => Boolean((m.content || '').trim()))
+    .slice(-10)
+
+  const latest = (latestUserText || '').trim()
+  if (!latest) return recent.slice(-4)
+
+  const queryTokens = tokenizeForTopic(latest)
+  if (queryTokens.size === 0) return []
+
+  const scored = recent.map((msg, idx) => ({
+    idx,
+    msg,
+    score: topicOverlap(queryTokens, msg.content || ''),
+  }))
+
+  let selected = scored.filter(x => x.score >= 0.26)
+  if (selected.length === 0) {
+    const best = [...scored].sort((a, b) => b.score - a.score)[0]
+    if (best && best.score >= 0.14) selected = [best]
+  }
+
+  return selected
+    .sort((a, b) => a.idx - b.idx)
+    .slice(-4)
+    .map(x => x.msg)
+}
+
+function topicOverlap(queryTokens: Set<string>, text: string): number {
+  const target = tokenizeForTopic(text)
+  if (target.size === 0) return 0
+  let overlap = 0
+  for (const t of queryTokens) {
+    if (target.has(t)) overlap += 1
+  }
+  return overlap / queryTokens.size
+}
+
+function tokenizeForTopic(text: string): Set<string> {
+  const set = new Set<string>()
+  const lower = (text || '').toLowerCase()
+
+  const latin = lower.match(/[a-z0-9]{2,}/g) ?? []
+  for (const w of latin) set.add(w)
+
+  const cjkChars = lower.match(/[\u4e00-\u9fff]/g) ?? []
+  for (let i = 0; i < cjkChars.length - 1; i += 1) {
+    set.add(cjkChars[i] + cjkChars[i + 1])
+  }
+
+  return set
 }
