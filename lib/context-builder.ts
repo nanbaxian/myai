@@ -224,6 +224,14 @@ function selectRelevantShortHistory(messages: DbMessage[], latestUserText: strin
 
   const latest = (latestUserText || '').trim()
   if (!latest) return recent.slice(-4)
+
+  // Single-word turns like "food" should be treated as new topics unless they
+  // explicitly carry follow-up cues.
+  const latinWords = latest.toLowerCase().match(/[a-z0-9]{2,}/g) ?? []
+  if (latinWords.length === 1 && latest.length <= 20 && !/[?？]/.test(latest)) {
+    return []
+  }
+
   if (isLikelyFollowUp(latest)) return recent.slice(-4)
 
   const queryTokens = tokenizeForTopic(latest)
@@ -251,14 +259,18 @@ function isLikelyFollowUp(text: string): boolean {
   const t = (text || '').trim().toLowerCase()
   if (!t) return false
 
-  // Very short replies are usually dependent on previous turn.
-  if (t.length <= 8) return true
-
   // Common Chinese follow-up cues.
   if (/(那你|你呢|然后呢|还有呢|是吗|有吗|咋样|怎么样|为啥|为什么|什么意思|哪个|这个|那个)/.test(t)) return true
 
   // Common English follow-up cues.
   if (/^(what about|and you|why|how so|which one|this|that)/.test(t)) return true
+
+  // Generic short acknowledgements are follow-ups.
+  if (/^(ok|okay|yes|no|sure|fine|cool|好|嗯|哦|行|可以)$/.test(t)) return true
+
+  // Very short CJK-only turns tend to be follow-ups.
+  const cjkOnly = /^[\u4e00-\u9fff]{1,4}$/.test(t)
+  if (cjkOnly) return true
 
   return false
 }
