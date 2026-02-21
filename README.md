@@ -76,6 +76,7 @@ Sidebar 底部提供最小登录组件：输入邮箱发送 Magic Link。
 服务端（Cloudflare Pages Functions）需要配置：
 
 - `SUPABASE_URL`、`SUPABASE_SERVICE_KEY`、`SUPABASE_JWT_ISS`（通常 `${SUPABASE_URL}/auth/v1`）、`SUPABASE_JWT_AUD`（通常 `authenticated`）
+- 若 `/auth/v1/certs` 返回 401，可额外配置 `SUPABASE_ANON_KEY`（后端验签拉 JWKS 时会优先使用该 key）
 
 > `/api/voice` 已强制要求登录：请求必须带 `Authorization: Bearer <access_token>`。
 

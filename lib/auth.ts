@@ -41,11 +41,18 @@ export async function verifySupabaseJwt(req: Request, env: any): Promise<AuthUse
   const certsUrl = /\/auth\/v1$/i.test(supabaseUrl)
     ? `${supabaseUrl}/certs`
     : `${supabaseUrl}/auth/v1/certs`
+  const certsApiKey = String(env.SUPABASE_ANON_KEY || env.SUPABASE_SERVICE_KEY || '').trim()
 
   // Fetch JWKS (cached by Cloudflare)
   let jwksRes: Response
   try {
     jwksRes = await fetch(certsUrl, {
+      headers: certsApiKey
+        ? {
+            apikey: certsApiKey,
+            Authorization: `Bearer ${certsApiKey}`,
+          }
+        : undefined,
       cf: { cacheTtl: 3600, cacheEverything: true } as any,
     })
   } catch (e: any) {
