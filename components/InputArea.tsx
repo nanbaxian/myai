@@ -42,11 +42,13 @@ export default function InputArea({
   onReplyLanguageChange,
   lastAiMessage,
 }: Props) {
+  type TtsMode = 'api' | 'browser'
   const [text, setText]               = useState('')
   const [isRecording, setIsRecording] = useState(false)
   const [isTranscribing, setIsTranscribing] = useState(false)
   const [isTTSPlaying, setIsTTSPlaying]     = useState(false)
   const [ttsEnabled, setTtsEnabled]         = useState(false)
+  const [ttsMode, setTtsMode]               = useState<TtsMode>('api')
   const [pendingImage, setPendingImage]      = useState<{ base64: string; preview: string } | null>(null)
   const [pendingImageFile, setPendingImageFile] = useState<File | null>(null)
   const [sttError, setSttError]             = useState('')
@@ -67,12 +69,48 @@ export default function InputArea({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lastAiMessage])
 
+  useEffect(() => {
+    try {
+      const saved = window.localStorage.getItem('tts_mode')
+      if (saved === 'api' || saved === 'browser') setTtsMode(saved)
+    } catch {}
+  }, [])
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem('tts_mode', ttsMode)
+    } catch {}
+  }, [ttsMode])
+
+  const browserTtsLang = replyLanguage === 'en' ? 'en-US' : 'zh-CN'
+
   const playTTS = async (content: string) => {
     if (!content.trim()) return
     // 截取前150字，避免TTS太长
     const short = content.slice(0, 150)
     setIsTTSPlaying(true)
     try {
+      if (ttsMode === 'browser') {
+        if (!('speechSynthesis' in window) || typeof SpeechSynthesisUtterance === 'undefined') {
+          setSttError('当前浏览器不支持内置TTS')
+          setTimeout(() => setSttError(''), 3000)
+          setIsTTSPlaying(false)
+          return
+        }
+        window.speechSynthesis.cancel()
+        const utter = new SpeechSynthesisUtterance(short)
+        utter.lang = browserTtsLang
+        utter.rate = 1
+        utter.pitch = 1
+        const voices = window.speechSynthesis.getVoices()
+        const voice = voices.find(v => v.lang.toLowerCase().startsWith(browserTtsLang.slice(0, 2).toLowerCase()))
+        if (voice) utter.voice = voice
+        utter.onend = () => setIsTTSPlaying(false)
+        utter.onerror = () => setIsTTSPlaying(false)
+        window.speechSynthesis.speak(utter)
+        return
+      }
+
       const sess = await supabase.auth.getSession()
       const token = sess.data.session?.access_token
       if (!token) {
@@ -109,6 +147,7 @@ export default function InputArea({
 
   const stopTTS = () => {
     audioRef.current?.pause()
+    if ('speechSynthesis' in window) window.speechSynthesis.cancel()
     setIsTTSPlaying(false)
   }
 
@@ -314,6 +353,13 @@ export default function InputArea({
           title={ttsEnabled ? '关闭语音回复' : '开启语音回复'}
         >
           {isTTSPlaying ? '⏹' : '🔊'}
+        </button>
+        <button
+          onClick={() => setTtsMode(m => (m === 'api' ? 'browser' : 'api'))}
+          className={`tool-btn ${ttsMode === 'browser' ? 'bg-accent/10 !border-accent !text-accent' : ''}`}
+          title={ttsMode === 'browser' ? '当前：浏览器TTS（点击切到API）' : '当前：API TTS（点击切到浏览器）'}
+        >
+          {ttsMode === 'browser' ? '🌐' : '☁️'}
         </button>
 
         {/* 转录中提示 / 错误提示 */}
