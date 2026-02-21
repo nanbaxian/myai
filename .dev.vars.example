@@ -9,6 +9,10 @@ DEEPINFRA_COALESCE_CHARS=14
 GEMINI_API_KEY=your-gemini-api-key-here
 GEMINI_VISION_MODEL=gemini-2.5-flash-lite
 DEEPGRAM_API_KEY=your-deepgram-api-key-here
+# TTS provider options (frontend `provider` query):
+# 1) deepgram   -> uses `DEEPGRAM_API_KEY` + `DEEPGRAM_TTS_MODEL_EN`
+# 2) elevenlabs -> uses `ELEVENLABS_API_KEY` + `ELEVENLABS_VOICE_ID`
+# 3) google     -> uses `GOOGLE_TTS_API_KEY`
 DEEPGRAM_TTS_MODEL_EN=aura-2-thalia-en
 GOOGLE_TTS_API_KEY=your-google-tts-api-key-here
 ELEVENLABS_API_KEY=your-elevenlabs-api-key-here
