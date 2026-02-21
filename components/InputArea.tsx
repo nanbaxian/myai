@@ -81,7 +81,7 @@ export default function InputArea({
         setIsTTSPlaying(false)
         return
       }
-      const res = await fetch(`/api/voice?text=${encodeURIComponent(short)}`, {
+      const res = await fetch(`/api/voice?text=${encodeURIComponent(short)}&lang=${encodeURIComponent(replyLanguage)}`, {
         headers: {
           Authorization: `Bearer ${token}`,
         },

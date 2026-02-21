@@ -37,6 +37,7 @@ interface Env {
 }
 
 type SttLanguage = 'auto' | 'zh' | 'en'
+type VoiceLanguage = 'auto' | 'zh' | 'en'
 
 const cors = {
   'Access-Control-Allow-Origin': '*',
@@ -109,6 +110,16 @@ function getDeepgramDetectedLanguage(dgJson: any): string {
 function normalizeSttLanguage(v: unknown): SttLanguage {
   if (v === 'zh' || v === 'en' || v === 'auto') return v
   return 'auto'
+}
+
+function normalizeVoiceLanguage(v: unknown): VoiceLanguage {
+  if (v === 'zh' || v === 'en' || v === 'auto') return v
+  return 'auto'
+}
+
+function inferLanguageFromText(text: string): Exclude<VoiceLanguage, 'auto'> {
+  // Basic heuristic: if contains CJK chars, treat as Chinese, otherwise English.
+  return /[\u3400-\u9FFF]/.test(text) ? 'zh' : 'en'
 }
 
 // ================================================
@@ -321,10 +332,15 @@ export const onRequestGet: PagesFunction<Env> = async (ctx) => {
 
   const u = new URL(request.url)
   const text = u.searchParams.get('text')
+  const voiceLanguage = normalizeVoiceLanguage(u.searchParams.get('lang'))
   if (!text) {
     log.fail('missing text', { stage: 'validate', userId })
     return jsonError('text 参数不能为空', 400)
   }
+  const resolvedVoiceLanguage = voiceLanguage === 'auto'
+    ? inferLanguageFromText(text)
+    : voiceLanguage
+  const googleLanguageCode = resolvedVoiceLanguage === 'zh' ? 'cmn-CN' : 'en-US'
 
   // Free 配额检查
   let remaining = 0
@@ -413,7 +429,9 @@ export const onRequestGet: PagesFunction<Env> = async (ctx) => {
     plan,
     chars,
     estSeconds,
-    voice: 'zh-CN-Standard-A',
+    requestedLanguage: voiceLanguage,
+    resolvedLanguage: resolvedVoiceLanguage,
+    languageCode: googleLanguageCode,
     audioEncoding: 'MP3',
   })
   const ggRes = await fetch(ggUrl, {
@@ -422,8 +440,7 @@ export const onRequestGet: PagesFunction<Env> = async (ctx) => {
     body: JSON.stringify({
       input: { text: text.slice(0, 1200) },
       voice: {
-        languageCode: 'zh-CN',
-        name: 'zh-CN-Standard-A',
+        languageCode: googleLanguageCode,
       },
       audioConfig: {
         audioEncoding: 'MP3',
