@@ -332,9 +332,6 @@ export default function InputArea({
           <option value="zh">中文</option>
           <option value="en">English</option>
         </select>
-        <span className="text-[11px] text-ink-mute hidden sm:block">
-          {persona?.name ? `${persona.name} · ` : ''}Gemini Flash 1.5
-        </span>
       </div>
 
       {/* 输入行 */}
