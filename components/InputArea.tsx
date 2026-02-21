@@ -61,6 +61,7 @@ export default function InputArea({
   const audioChunksRef   = useRef<Blob[]>([])
   const audioRef         = useRef<HTMLAudioElement | null>(null)
   const streamRef        = useRef<MediaStream | null>(null)
+  const replyLanguageRef = useRef<ReplyLanguage>(replyLanguage)
 
   // ================================================
   // TTS：AI 回复后自动播放（如果开启）
@@ -70,6 +71,10 @@ export default function InputArea({
     playTTS(lastAiMessage)
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lastAiMessage])
+
+  useEffect(() => {
+    replyLanguageRef.current = replyLanguage
+  }, [replyLanguage])
 
   useEffect(() => {
     try {
@@ -95,12 +100,12 @@ export default function InputArea({
     }
   }, [replyLanguage, apiTtsProvider])
 
-  const browserTtsLang = replyLanguage === 'en' ? 'en-US' : 'zh-CN'
-
   const playTTS = async (content: string) => {
     if (!content.trim()) return
     // 截取前150字，避免TTS太长
     const short = content.slice(0, 150)
+    const currentLang = replyLanguageRef.current
+    const browserTtsLang = currentLang === 'en' ? 'en-US' : 'zh-CN'
     setIsTTSPlaying(true)
     try {
       if (ttsMode === 'browser') {
@@ -133,7 +138,7 @@ export default function InputArea({
         return
       }
       const res = await fetch(
-        `/api/voice?text=${encodeURIComponent(short)}&lang=${encodeURIComponent(replyLanguage)}&provider=${encodeURIComponent(apiTtsProvider)}`,
+        `/api/voice?text=${encodeURIComponent(short)}&lang=${encodeURIComponent(currentLang)}&provider=${encodeURIComponent(apiTtsProvider)}`,
         {
         headers: {
           Authorization: `Bearer ${token}`,
@@ -243,7 +248,7 @@ export default function InputArea({
               body: JSON.stringify({
                 audioUrl: up.url,
                 durationSeconds: Math.ceil(Math.max(1, Math.floor(durationMs)) / 1000),
-                replyLanguage,
+                replyLanguage: replyLanguageRef.current,
               }),
               
             })
@@ -273,7 +278,7 @@ export default function InputArea({
         alert('无法访问麦克风，请在浏览器设置中允许麦克风权限')
       }
     }
-  }, [isRecording, replyLanguage])
+  }, [isRecording])
 
   // ================================================
   // 图片上传 + 压缩
@@ -313,9 +318,9 @@ export default function InputArea({
           return
         }
         const up = await uploadFileToR2(pendingImageFile, token)
-        onSend(trimmed, up.url, pendingImage?.preview, replyLanguage)
+        onSend(trimmed, up.url, pendingImage?.preview, replyLanguageRef.current)
       } else {
-        onSend(trimmed, undefined, undefined, replyLanguage)
+        onSend(trimmed, undefined, undefined, replyLanguageRef.current)
       }
     })()
     setText('')
@@ -402,7 +407,11 @@ export default function InputArea({
         <div className="flex-1" />
         <select
           value={replyLanguage}
-          onChange={e => onReplyLanguageChange(e.target.value as ReplyLanguage)}
+          onChange={e => {
+            const lang = e.target.value as ReplyLanguage
+            replyLanguageRef.current = lang
+            onReplyLanguageChange(lang)
+          }}
           className="h-8 rounded-lg border border-paper-deep bg-white px-2 text-[12px] text-ink outline-none focus:border-accent-soft"
           title="Reply language"
           disabled={disabled}
