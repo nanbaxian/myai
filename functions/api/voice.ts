@@ -22,6 +22,7 @@ interface Env {
   DEEPGRAM_API_KEY: string
   GOOGLE_TTS_API_KEY: string
   DEEPGRAM_TTS_MODEL_EN?: string
+  DEEPGRAM_TTS_MODEL_ZH?: string
 
   // Pro tier
   ELEVENLABS_API_KEY?: string
@@ -364,24 +365,26 @@ export const onRequestGet: PagesFunction<Env> = async (ctx) => {
     }
   }
 
-  const providerOrder: TtsProvider[] = (() => {
-    if (requestedProvider === 'deepgram') return ['deepgram', 'elevenlabs', 'google']
-    if (requestedProvider === 'elevenlabs') return ['elevenlabs', 'deepgram', 'google']
-    return ['google', 'deepgram', 'elevenlabs']
-  })()
-
-  // Provider 1: Deepgram Aura
-  if (providerOrder.includes('deepgram')) {
-    if (resolvedVoiceLanguage !== 'en') {
-      log.fail('deepgram tts unsupported language', {
+  // Provider: Deepgram Aura
+  if (requestedProvider === 'deepgram') {
+    const dgModel = resolvedVoiceLanguage === 'zh'
+      ? String(env.DEEPGRAM_TTS_MODEL_ZH || '').trim()
+      : String(env.DEEPGRAM_TTS_MODEL_EN || 'aura-2-thalia-en').trim()
+    if (!dgModel) {
+      log.fail('missing deepgram tts model for language', {
         stage: 'tts',
         userId,
         plan,
         provider: 'deepgram',
         resolvedVoiceLanguage,
       })
+      return jsonError(
+        resolvedVoiceLanguage === 'zh'
+          ? '缺少 DEEPGRAM_TTS_MODEL_ZH，请配置后再使用 Deepgram 中文 TTS'
+          : '缺少 DEEPGRAM_TTS_MODEL_EN，请配置后再使用 Deepgram 英文 TTS',
+        500
+      )
     } else {
-      const dgModel = env.DEEPGRAM_TTS_MODEL_EN || 'aura-2-thalia-en'
       const dgUrl = new URL('https://api.deepgram.com/v1/speak')
       dgUrl.searchParams.set('model', dgModel)
       dgUrl.searchParams.set('encoding', 'mp3')
@@ -435,11 +438,16 @@ export const onRequestGet: PagesFunction<Env> = async (ctx) => {
         status: dgRes.status,
         bodyPreview: dgBody.slice(0, 400),
       })
+      return jsonError('语音合成失败（Deepgram）', 500)
     }
   }
 
-  // Provider 2: ElevenLabs
-  if (providerOrder.includes('elevenlabs') && env.ELEVENLABS_API_KEY) {
+  // Provider: ElevenLabs
+  if (requestedProvider === 'elevenlabs') {
+    if (!env.ELEVENLABS_API_KEY) {
+      log.fail('missing ELEVENLABS_API_KEY', { stage: 'tts', userId, plan, provider: 'elevenlabs' })
+      return jsonError('缺少 ELEVENLABS_API_KEY', 500)
+    }
     const voiceId = env.ELEVENLABS_VOICE_ID || '21m00Tcm4TlvDq8ikWAM' // ElevenLabs 常用默认
     const elUrl = `https://api.elevenlabs.io/v1/text-to-speech/${encodeURIComponent(voiceId)}/stream`
     const elStartedAt = Date.now()
@@ -448,6 +456,8 @@ export const onRequestGet: PagesFunction<Env> = async (ctx) => {
       plan,
       voiceId,
       model: 'eleven_multilingual_v2',
+      requestedLanguage: voiceLanguage,
+      resolvedLanguage: resolvedVoiceLanguage,
       chars,
       estSeconds,
     })
@@ -500,11 +510,11 @@ export const onRequestGet: PagesFunction<Env> = async (ctx) => {
       status: elRes.status,
       bodyPreview: elBody.slice(0, 400),
     })
-    // 失败回退其他 provider
+    return jsonError('语音合成失败（ElevenLabs）', 500)
   }
 
-  // Provider 3: Google TTS
-  if (providerOrder.includes('google')) {
+  // Provider: Google TTS
+  if (requestedProvider === 'google') {
     const ggUrl = `https://texttospeech.googleapis.com/v1/text:synthesize?key=${env.GOOGLE_TTS_API_KEY}`
     const ggStartedAt = Date.now()
     log.info('google-tts:request', {
@@ -552,6 +562,7 @@ export const onRequestGet: PagesFunction<Env> = async (ctx) => {
         status: ggRes.status,
         bodyPreview: ggBody.slice(0, 400),
       })
+      return jsonError('语音合成失败（Google）', 500)
     } else {
       const ggJson = await ggRes.json() as { audioContent?: string }
       const b64 = ggJson.audioContent
@@ -563,6 +574,7 @@ export const onRequestGet: PagesFunction<Env> = async (ctx) => {
       })
       if (!b64) {
         log.fail('google tts empty audioContent', { stage: 'tts', userId, plan, provider: 'google' })
+        return jsonError('语音合成失败（Google 空返回）', 500)
       } else {
         await chargeQuota()
         const bin = Uint8Array.from(atob(b64), c => c.charCodeAt(0))
@@ -579,14 +591,14 @@ export const onRequestGet: PagesFunction<Env> = async (ctx) => {
     }
   }
 
-  log.fail('all tts providers failed', {
+  log.fail('unsupported provider', {
     stage: 'tts',
     userId,
     plan,
     requestedProvider,
     resolvedVoiceLanguage,
   })
-  return jsonError('语音合成失败', 500)
+  return jsonError('不支持的 TTS provider', 400)
 }
 
 export const onRequestOptions = (): Response => new Response(null, { headers: cors })

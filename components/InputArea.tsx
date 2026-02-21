@@ -89,6 +89,12 @@ export default function InputArea({
     } catch {}
   }, [ttsMode, apiTtsProvider])
 
+  useEffect(() => {
+    if (replyLanguage === 'zh' && apiTtsProvider === 'deepgram') {
+      setApiTtsProvider('google')
+    }
+  }, [replyLanguage, apiTtsProvider])
+
   const browserTtsLang = replyLanguage === 'en' ? 'en-US' : 'zh-CN'
 
   const playTTS = async (content: string) => {
@@ -377,7 +383,9 @@ export default function InputArea({
             className="h-8 rounded-lg border border-paper-deep bg-white px-2 text-[12px] text-ink outline-none focus:border-accent-soft"
             title="TTS API provider"
           >
-            <option value="deepgram">Deepgram</option>
+            <option value="deepgram" disabled={replyLanguage === 'zh'}>
+              Deepgram{replyLanguage === 'zh' ? ' (English only)' : ''}
+            </option>
             <option value="elevenlabs">ElevenLabs</option>
             <option value="google">Google</option>
           </select>
