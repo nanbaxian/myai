@@ -1,115 +1,188 @@
 'use client'
 
-// components/Sidebar.tsx — P2 版本：记忆管理 + 多人设切换入口
-
 import { useEffect, useState } from 'react'
 import { Persona } from '@/types'
-import AuthWidget from '@/components/AuthWidget'
-
-interface MemoryItem { id: string; tier: string; content: string }
+import { supabase } from '@/lib/supabase-browser'
+import { AnimatePresence, motion } from 'framer-motion'
+import type { ComponentType } from 'react'
+import {
+  Sparkles,
+  Settings,
+  Brain,
+  Users,
+  LogOut,
+  Plus,
+  ChevronLeft,
+  ChevronRight,
+  Phone,
+  History,
+} from 'lucide-react'
 
 interface Props {
   persona: Persona | null
-  onEditPersona:    () => void
-  onOpenMemory:     () => void   // P2：记忆管理
-  onSwitchPersona:  () => void   // P2：人设切换
-  refreshKey?:      number       // 每次 AI 回复后+1，触发记忆刷新
+  isOpen: boolean
+  onToggle: () => void
+  onEditPersona: () => void
+  onOpenMemory: () => void
+  onSwitchPersona: () => void
+  onOpenHistory: () => void
+  onStartVoiceCall: () => void
+  refreshKey?: number
 }
 
-const TIER_CFG = {
-  core:  { label: '核心', cls: 'border-amber-400 bg-amber-50/60 text-ink',        badge: 'bg-amber-100 text-amber-700' },
-  short: { label: '短期', cls: 'border-accent bg-red-50/60 text-ink',             badge: 'bg-red-100 text-accent' },
-  mid:   { label: '中期', cls: 'border-yellow-400 bg-yellow-50/60 text-ink-soft', badge: 'bg-yellow-100 text-yellow-700' },
-  long:  { label: '长期', cls: 'border-stone-300 bg-stone-50/60 text-ink-mute',   badge: 'bg-stone-100 text-stone-500' },
-} as const
-
-export default function Sidebar({ persona, onEditPersona, onOpenMemory, onSwitchPersona, refreshKey = 0 }: Props) {
-  const [memories, setMemories] = useState<MemoryItem[]>([])
+export default function Sidebar({
+  persona,
+  isOpen,
+  onToggle,
+  onEditPersona,
+  onOpenMemory,
+  onSwitchPersona,
+  onOpenHistory,
+  onStartVoiceCall,
+}: Props) {
+  const [userEmail, setUserEmail] = useState<string | null>(null)
 
   useEffect(() => {
-    fetch('/api/memory/list')
-      .then(r => r.json() as Promise<MemoryItem[]>)
-      .then(data => setMemories(data || []))
-      .catch(() => {})
-  }, [refreshKey])
+    let active = true
+
+    supabase.auth.getSession().then(({ data }) => {
+      if (!active) return
+      setUserEmail(data.session?.user?.email ?? null)
+    })
+
+    const { data: sub } = supabase.auth.onAuthStateChange((_evt, sess) => {
+      setUserEmail(sess?.user?.email ?? null)
+    })
+
+    return () => {
+      active = false
+      sub.subscription.unsubscribe()
+    }
+  }, [])
+
+  const onLogout = async () => {
+    await supabase.auth.signOut()
+  }
 
   return (
-    <aside className="w-[272px] min-w-[272px] flex flex-col border-r border-paper-deep bg-paper-warm overflow-hidden">
-
-      {/* App Header */}
-      <div className="px-6 pt-7 pb-5 border-b border-paper-deep flex-shrink-0">
-        <div className="font-display text-[22px] text-ink tracking-wide">
-          心<span className="text-accent italic">语</span>
-        </div>
-        <div className="text-[11px] text-ink-mute mt-1 uppercase tracking-widest">AI 伴侣 · 私人版</div>
-      </div>
-
-      {/* Persona Card */}
-      <div className="mx-4 mt-5 mb-1 relative">
-        {/* 编辑按钮 */}
-        <div
-          onClick={onEditPersona}
-          className="p-4 bg-paper rounded-xl border border-paper-deep cursor-pointer transition-all hover:shadow-card hover:-translate-y-px relative overflow-hidden group"
+    <>
+      {!isOpen && (
+        <motion.button
+          initial={{ opacity: 0, x: -10 }}
+          animate={{ opacity: 1, x: 0 }}
+          onClick={onToggle}
+          className="fixed top-4 left-4 z-40 glass-panel rounded-xl p-2.5 hover:bg-secondary transition-colors"
         >
-          <div className="absolute left-0 top-0 bottom-0 w-0.5 bg-accent rounded-r" />
-          <div className="w-12 h-12 rounded-full bg-gradient-to-br from-accent-soft to-accent flex items-center justify-center text-[22px] mb-2.5 shadow-glow">
-            {persona?.avatar || '🌸'}
-          </div>
-          <div className="font-serif text-[16px] text-ink">{persona?.name || '加载中...'}</div>
-          <div className="text-xs text-ink-mute mt-1 leading-relaxed line-clamp-2">
-            {persona?.prompt?.slice(0, 55) || '点击编辑人设'}...
-          </div>
-          <div className="flex items-center gap-1.5 mt-2.5">
-            <div className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
-            <span className="text-[11px] text-ink-mute">在线</span>
-          </div>
-          <div className="absolute top-3 right-3 text-[10px] text-ink-mute opacity-0 group-hover:opacity-100 transition-opacity">编辑 →</div>
-        </div>
+          <ChevronRight className="w-5 h-5 text-muted-foreground" />
+        </motion.button>
+      )}
 
-        {/* 切换人设按钮（右上角浮动） */}
-        <button
-          onClick={onSwitchPersona}
-          className="absolute -top-2 -right-2 w-7 h-7 rounded-full bg-paper border border-paper-deep shadow-sm text-xs text-ink-mute hover:text-accent hover:border-accent-soft transition-all flex items-center justify-center"
-          title="切换人设"
-        >⇄</button>
-      </div>
-
-      {/* Memory Section */}
-      <div className="flex-1 overflow-y-auto px-4 pb-4">
-        <div className="text-[10px] uppercase tracking-widest text-ink-mute py-3 flex items-center gap-2">
-          记忆
-          <div className="flex-1 h-px bg-paper-deep" />
-        </div>
-
-        {memories.length === 0 ? (
-          <div className="text-xs text-ink-mute text-center py-6 leading-relaxed">
-            还没有记忆<br/>
-            <span className="text-[11px]">多聊几句就会有了</span>
-          </div>
-        ) : (
-          memories.map(mem => {
-            const cfg = TIER_CFG[mem.tier as keyof typeof TIER_CFG] ?? TIER_CFG.short
-            return (
-              <div key={mem.id} className={`px-3 py-2 rounded-lg border-l-2 mb-1.5 text-xs leading-relaxed ${cfg.cls}`}>
-                <span className={`text-[9px] px-1.5 py-0.5 rounded-full mr-1 font-medium uppercase tracking-wide ${cfg.badge}`}>
-                  {cfg.label}
-                </span>
-                {mem.content}
+      <AnimatePresence>
+        {isOpen && (
+          <motion.aside
+            initial={{ x: -280, opacity: 0 }}
+            animate={{ x: 0, opacity: 1 }}
+            exit={{ x: -280, opacity: 0 }}
+            transition={{ type: 'spring', damping: 25, stiffness: 250 }}
+            className="fixed lg:relative z-30 w-[280px] h-full flex flex-col bg-sidebar border-r border-sidebar-border"
+          >
+            <div className="flex items-center justify-between px-5 py-5">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center">
+                  <Sparkles className="w-4 h-4 text-primary" />
+                </div>
+                <span className="font-serif text-lg text-foreground">心语</span>
               </div>
-            )
-          })
-        )}
-      </div>
+              <button onClick={onToggle} className="p-1.5 rounded-lg hover:bg-sidebar-accent transition-colors">
+                <ChevronLeft className="w-4 h-4 text-muted-foreground" />
+              </button>
+            </div>
 
-      {/* Footer */}
-      <div className="p-4 border-t border-paper-deep flex-shrink-0">
-        <AuthWidget className="mb-3" />
-        <div className="flex gap-2">
-          <button onClick={onEditPersona}   className="flex-1 py-2 rounded-lg border border-paper-deep text-[11px] text-ink-mute hover:bg-paper hover:text-ink transition-all">✦ 人设</button>
-          <button onClick={onOpenMemory}    className="flex-1 py-2 rounded-lg border border-paper-deep text-[11px] text-ink-mute hover:bg-paper hover:text-ink transition-all">◎ 记忆</button>
-          <button onClick={onSwitchPersona} className="flex-1 py-2 rounded-lg border border-paper-deep text-[11px] text-ink-mute hover:bg-paper hover:text-ink transition-all">⇄ 切换</button>
-        </div>
-      </div>
-    </aside>
+            {persona && (
+              <div className="mx-4 mb-4 p-4 rounded-xl bg-sidebar-accent border border-sidebar-border">
+                <div className="flex items-center gap-3 mb-3">
+                  <div className="w-10 h-10 rounded-full bg-primary/15 flex items-center justify-center text-xl border border-primary/20">
+                    {persona.avatar || '🌸'}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="font-serif text-sm text-foreground truncate">{persona.name}</div>
+                    <div className="flex items-center gap-1.5 mt-0.5">
+                      <div className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse-glow" />
+                      <span className="text-xs text-muted-foreground">在线</span>
+                    </div>
+                  </div>
+                </div>
+                <p className="text-xs text-muted-foreground line-clamp-2 leading-relaxed">
+                  {persona.prompt?.slice(0, 80)}...
+                </p>
+              </div>
+            )}
+
+            <div className="px-3 space-y-1 flex-1">
+              <SidebarButton icon={Settings} label="编辑人设" onClick={onEditPersona} />
+              <SidebarButton icon={Brain} label="记忆管理" onClick={onOpenMemory} />
+              <SidebarButton icon={Users} label="切换人设" onClick={onSwitchPersona} />
+              <SidebarButton icon={History} label="聊天记录" onClick={onOpenHistory} />
+              <SidebarButton icon={Phone} label="语音通话" onClick={onStartVoiceCall} />
+              <SidebarButton icon={Plus} label="新对话" onClick={() => window.location.reload()} />
+            </div>
+
+            <div className="p-4 border-t border-sidebar-border">
+              {userEmail ? (
+                <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 rounded-full bg-secondary flex items-center justify-center text-xs text-muted-foreground">
+                    {userEmail[0].toUpperCase()}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="text-xs text-muted-foreground truncate">{userEmail}</div>
+                  </div>
+                  <button
+                    onClick={onLogout}
+                    className="p-1.5 rounded-lg hover:bg-sidebar-accent transition-colors"
+                    title="退出"
+                  >
+                    <LogOut className="w-4 h-4 text-muted-foreground" />
+                  </button>
+                </div>
+              ) : (
+                <div className="text-xs text-muted-foreground">未登录</div>
+              )}
+            </div>
+          </motion.aside>
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {isOpen && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={onToggle}
+            className="fixed inset-0 bg-background/50 backdrop-blur-sm z-20 lg:hidden"
+          />
+        )}
+      </AnimatePresence>
+    </>
+  )
+}
+
+function SidebarButton({
+  icon: Icon,
+  label,
+  onClick,
+}: {
+  icon: ComponentType<{ className?: string }>
+  label: string
+  onClick: () => void
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground transition-all group"
+    >
+      <Icon className="w-4 h-4 text-muted-foreground group-hover:text-primary transition-colors" />
+      {label}
+    </button>
   )
 }

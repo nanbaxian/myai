@@ -1,37 +1,54 @@
 'use client'
 
-// app/page.tsx — P2 完整版
-
-import { useState, useEffect } from 'react'
-import Sidebar          from '@/components/Sidebar'
-import ChatWindow       from '@/components/ChatWindow'
-import PersonaModal     from '@/components/PersonaModal'
-import MemoryManager    from '@/components/MemoryManager'
-import PersonaSwitcher  from '@/components/PersonaSwitcher'
+import { useEffect, useState } from 'react'
+import Sidebar from '@/components/Sidebar'
+import ChatWindow from '@/components/ChatWindow'
+import PersonaModal from '@/components/PersonaModal'
+import MemoryManager from '@/components/MemoryManager'
+import PersonaSwitcher from '@/components/PersonaSwitcher'
+import ChatHistoryPanel from '@/components/ChatHistoryPanel'
+import VoiceCallOverlay from '@/components/VoiceCallOverlay'
 import { Persona, Message, ReplyLanguage } from '@/types'
 
 type Modal = 'persona' | 'memory' | 'switcher' | null
 
+const DEFAULT_PERSONA: Persona = {
+  id: 'default',
+  name: '晓雨',
+  avatar: '🌸',
+  reply_style: 'medium',
+  prompt: '你叫晓雨，是一个25岁的女生。你温柔体贴，善解人意，有一种让人如沐春风的亲切感。',
+}
+
 export default function Home() {
-  const [persona,  setPersona]  = useState<Persona | null>(null)
+  const [persona, setPersona] = useState<Persona | null>(null)
   const [messages, setMessages] = useState<Message[]>([])
-  const [modal,    setModal]    = useState<Modal>(null)
-  const [loading,  setLoading]  = useState(true)
+  const [modal, setModal] = useState<Modal>(null)
+  const [loading, setLoading] = useState(true)
   const [sidebarRefreshKey, setSidebarRefreshKey] = useState(0)
   const [replyLanguage, setReplyLanguage] = useState<ReplyLanguage>('zh')
+  const [sidebarOpen, setSidebarOpen] = useState(true)
+  const [historyOpen, setHistoryOpen] = useState(false)
+  const [voiceCallOpen, setVoiceCallOpen] = useState(false)
 
-  // 启动时加载活跃人设
   useEffect(() => {
     fetch('/api/personas/active')
       .then(r => {
         if (!r.ok) throw new Error('load failed')
         return r.json() as Promise<Persona>
       })
-      .then((data: Persona) => { setPersona(data); setLoading(false) })
-      .catch(() => setLoading(false))
+      .then((data: Persona) => {
+        setPersona(data?.id ? data : DEFAULT_PERSONA)
+        setLoading(false)
+      })
+      .catch(() => {
+        setPersona(DEFAULT_PERSONA)
+        setLoading(false)
+      })
   }, [])
 
-  // 切换人设时清空聊天记录（新的人设不应该有旧消息）
+  const activePersona = persona ?? DEFAULT_PERSONA
+
   const handlePersonaSwitch = (newPersona: Persona) => {
     setPersona(newPersona)
     setMessages([])
@@ -76,13 +93,13 @@ export default function Home() {
 
       if (!res.ok) throw new Error('API error')
 
-      const reader     = res.body!.getReader()
-      const decoder    = new TextDecoder()
-      let aiContent    = ''
-      let started      = false
-      let finished     = false
-      let lineBuffer   = ''   // BUG-2修复：跨 chunk 行缓冲
-      let streamError  = ''
+      const reader = res.body!.getReader()
+      const decoder = new TextDecoder()
+      let aiContent = ''
+      let started = false
+      let finished = false
+      let lineBuffer = ''
+      let streamError = ''
 
       while (true) {
         const { done, value } = await reader.read()
@@ -90,7 +107,7 @@ export default function Home() {
 
         lineBuffer += decoder.decode(value)
         const lines = lineBuffer.split('\n')
-        lineBuffer  = lines.pop() ?? ''   // 保留不完整的最后一行
+        lineBuffer = lines.pop() ?? ''
 
         for (const line of lines) {
           if (!line.startsWith('data: ')) continue
@@ -99,18 +116,12 @@ export default function Home() {
             if (data.text) {
               aiContent += data.text
               if (!started) {
-                // 第一个token来了，把 typing 变成真实消息
                 started = true
                 setMessages(prev =>
-                  prev.map(m => m.id === typingId
-                    ? { ...m, is_typing: false, content: aiContent }
-                    : m
-                  )
+                  prev.map(m => (m.id === typingId ? { ...m, is_typing: false, content: aiContent } : m)),
                 )
               } else {
-                setMessages(prev =>
-                  prev.map(m => m.id === typingId ? { ...m, content: aiContent } : m)
-                )
+                setMessages(prev => prev.map(m => (m.id === typingId ? { ...m, content: aiContent } : m)))
               }
             }
             if (data.error) {
@@ -120,61 +131,69 @@ export default function Home() {
               finished = true
               const finalText = aiContent || '我这边暂时没有生成出内容，换个说法再试试。'
               setMessages(prev =>
-                prev.map(m => m.id === typingId
-                  ? { ...m, id: 'ai-' + Date.now(), is_typing: false, content: finalText }
-                  : m
-                )
+                prev.map(m =>
+                  m.id === typingId
+                    ? { ...m, id: 'ai-' + Date.now(), is_typing: false, content: finalText }
+                    : m,
+                ),
               )
               setSidebarRefreshKey(k => k + 1)
             }
-          } catch {}
+          } catch {
+            // ignore invalid chunks
+          }
         }
       }
 
-      // 兜底：流结束但没有 done 事件时，避免一直卡在“正在输入”
       if (!finished) {
         setMessages(prev =>
-          prev.map(m => m.id === typingId
-            ? {
-                ...m,
-                is_typing: false,
-                id: 'err-' + Date.now(),
-                content: streamError ? `请求失败：${streamError}` : '暂时没有拿到回复，请再试一次。',
-              }
-            : m
-          )
+          prev.map(m =>
+            m.id === typingId
+              ? {
+                  ...m,
+                  is_typing: false,
+                  id: 'err-' + Date.now(),
+                  content: streamError ? `请求失败：${streamError}` : '暂时没有拿到回复，请再试一次。',
+                }
+              : m,
+          ),
         )
       }
     } catch {
       setMessages(prev =>
-        prev.map(m => m.id === typingId
-          ? { ...m, is_typing: false, id: 'err-' + Date.now(), content: '出了点小问题，再试一次？' }
-          : m
-        )
+        prev.map(m =>
+          m.id === typingId ? { ...m, is_typing: false, id: 'err-' + Date.now(), content: '出了点小问题，再试一次？' } : m,
+        ),
       )
     }
   }
 
   if (loading) {
     return (
-      <div className="flex h-screen items-center justify-center bg-paper">
-        <div className="text-ink-mute text-sm animate-pulse">正在加载...</div>
+      <div className="flex h-screen items-center justify-center bg-background">
+        <div className="text-muted-foreground text-sm animate-pulse">正在加载...</div>
       </div>
     )
   }
 
   return (
-    <div className="flex h-screen overflow-hidden bg-paper">
+    <div className="flex h-screen bg-background overflow-hidden">
       <Sidebar
-        persona={persona}
-        onEditPersona={()   => setModal('persona')}
-        onOpenMemory={()    => setModal('memory')}
+        persona={activePersona}
+        isOpen={sidebarOpen}
+        onToggle={() => setSidebarOpen(!sidebarOpen)}
+        onEditPersona={() => setModal('persona')}
+        onOpenMemory={() => setModal('memory')}
         onSwitchPersona={() => setModal('switcher')}
+        onOpenHistory={() => setHistoryOpen(true)}
+        onStartVoiceCall={() => setVoiceCallOpen(true)}
         refreshKey={sidebarRefreshKey}
       />
 
+      <ChatHistoryPanel isOpen={historyOpen} onClose={() => setHistoryOpen(false)} />
+
       <ChatWindow
-        persona={persona}
+        persona={activePersona}
         messages={messages}
         replyLanguage={replyLanguage}
         onReplyLanguageChange={setReplyLanguage}
@@ -183,23 +202,22 @@ export default function Home() {
 
       {modal === 'persona' && (
         <PersonaModal
-          persona={persona}
-          onSave={p => { setPersona(p); setModal(null) }}
+          persona={activePersona}
+          onSave={p => {
+            setPersona(p)
+            setModal(null)
+          }}
           onClose={() => setModal(null)}
         />
       )}
 
-      {modal === 'memory' && (
-        <MemoryManager onClose={() => setModal(null)} />
-      )}
+      {modal === 'memory' && <MemoryManager onClose={() => setModal(null)} />}
 
       {modal === 'switcher' && (
-        <PersonaSwitcher
-          currentPersona={persona}
-          onSwitch={handlePersonaSwitch}
-          onClose={() => setModal(null)}
-        />
+        <PersonaSwitcher currentPersona={activePersona} onSwitch={handlePersonaSwitch} onClose={() => setModal(null)} />
       )}
+
+      {voiceCallOpen && <VoiceCallOverlay persona={activePersona} isOpen={voiceCallOpen} onClose={() => setVoiceCallOpen(false)} />}
     </div>
   )
 }

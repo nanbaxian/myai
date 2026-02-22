@@ -1,6 +1,8 @@
 'use client'
 
 import { Message, Persona } from '@/types'
+import { motion } from 'framer-motion'
+import ReactMarkdown from 'react-markdown'
 
 interface Props {
   message: Message
@@ -11,77 +13,75 @@ interface Props {
 export default function MessageBubble({ message, persona, isFirst }: Props) {
   const isAI = message.role === 'assistant'
   const isUser = message.role === 'user'
-  const now = new Date(message.created_at)
-  const time = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`
+  const time = new Date(message.created_at)
+  const timeStr = `${time.getHours().toString().padStart(2, '0')}:${time.getMinutes().toString().padStart(2, '0')}`
 
   return (
-    <div className={`flex gap-3 items-end animate-fade-up ${isUser ? 'flex-row-reverse' : ''}`}>
-
-      {/* Avatar - 只在第一条或角色切换时显示 */}
-      <div className={`w-8 h-8 rounded-full flex-shrink-0 flex items-center justify-center text-base
-        ${isAI
-          ? 'bg-gradient-to-br from-accent-soft to-accent shadow-glow'
-          : 'bg-paper-deep text-ink-mute text-xs'
-        }
-        ${!isFirst ? 'invisible' : ''}
-      `}>
-        {isAI ? (persona?.avatar || '🌸') : '我'}
+    <motion.div
+      initial={{ opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.3 }}
+      className={`flex gap-3 items-end ${isUser ? 'flex-row-reverse' : ''}`}
+    >
+      <div
+        className={`w-8 h-8 rounded-full flex-shrink-0 flex items-center justify-center text-sm
+          ${
+            isAI
+              ? 'bg-primary/15 border border-primary/25 shadow-[0_0_10px_hsl(var(--glow-primary)/0.2)]'
+              : 'bg-secondary text-muted-foreground'
+          }
+          ${!isFirst ? 'invisible' : ''}
+        `}
+      >
+        {isAI ? (persona?.avatar || '✨') : '👤'}
       </div>
 
-      {/* Bubble */}
-      <div className={`max-w-[66%] ${isUser ? 'items-end' : 'items-start'} flex flex-col gap-1`}>
-
-        {/* 图片消息 */}
+      <div className={`max-w-[70%] flex flex-col gap-1 ${isUser ? 'items-end' : 'items-start'}`}>
         {message.content_type === 'image' && (message.image_preview || message.image_url) && (
-          <div className="rounded-xl overflow-hidden border border-paper-deep shadow-sm max-w-[260px]">
-            <img
-              src={message.image_preview || message.image_url}
-              alt="图片"
-              className="w-full block"
-              loading="lazy"
-            />
+          <div className="rounded-2xl overflow-hidden border border-border max-w-[280px]">
+            <img src={message.image_preview || message.image_url} alt="图片" className="w-full block" loading="lazy" />
           </div>
         )}
 
-        {/* 文字内容 */}
         {(message.content || message.is_typing) && (
-          <div className={`px-4 py-3 rounded-2xl text-[14.5px] leading-[1.75] relative
-            ${isAI
-              ? 'bg-white border border-paper-deep shadow-sm text-ink rounded-bl-[4px]'
-              : 'bg-ink text-paper rounded-br-[4px]'
-            }
-          `}>
+          <div
+            className={`px-4 py-3 rounded-2xl text-sm leading-relaxed
+              ${
+                isAI
+                  ? 'bg-bubble-ai border border-border text-foreground rounded-bl-md'
+                  : 'bg-bubble-user text-bubble-user-foreground rounded-br-md'
+              }
+            `}
+          >
             {message.is_typing ? (
               <TypingDots />
+            ) : isAI ? (
+              <div className="prose prose-sm prose-invert max-w-none [&_p]:my-1 [&_ul]:my-1 [&_ol]:my-1">
+                <ReactMarkdown>{message.content}</ReactMarkdown>
+              </div>
             ) : (
               <span className="whitespace-pre-wrap break-words">{message.content}</span>
             )}
 
-            {/* 流式光标 */}
             {isAI && !message.is_typing && message.content && message.id.startsWith('typing-') && (
-              <span className="inline-block w-[2px] h-[1em] bg-accent ml-0.5 animate-blink align-middle" />
+              <span className="inline-block w-0.5 h-4 bg-primary ml-0.5 animate-pulse align-middle" />
             )}
           </div>
         )}
 
-        {/* 时间戳 */}
-        {!message.is_typing && (
-          <div className={`text-[11px] text-ink-mute ${isUser ? 'text-right' : 'text-left'}`}>
-            {time}
-          </div>
-        )}
+        {!message.is_typing && <span className="text-[11px] text-muted-foreground px-1">{timeStr}</span>}
       </div>
-    </div>
+    </motion.div>
   )
 }
 
 function TypingDots() {
   return (
-    <div className="flex gap-1.5 py-0.5 px-1 items-center">
+    <div className="flex gap-1.5 py-1 px-1 items-center">
       {[0, 1, 2].map(i => (
         <div
           key={i}
-          className="w-1.5 h-1.5 rounded-full bg-accent-soft animate-typing"
+          className="w-1.5 h-1.5 rounded-full bg-typing-dot animate-typing-dot"
           style={{ animationDelay: `${i * 0.2}s` }}
         />
       ))}

@@ -1,10 +1,9 @@
-// app/layout.tsx
 import type { Metadata, Viewport } from 'next'
 import './globals.css'
 
 export const metadata: Metadata = {
   title: '心语 · AI伴侣',
-  description: '专属你的AI伴侣，有记忆，懂人设',
+  description: '专属你的 AI 伴侣，有记忆，懂人设。',
 }
 
 export const viewport: Viewport = {

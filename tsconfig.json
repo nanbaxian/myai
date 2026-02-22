@@ -1,7 +1,11 @@
 {
   "compilerOptions": {
     "target": "ES2018",
-    "lib": ["ES2018", "dom", "dom.iterable"],
+    "lib": [
+      "ES2018",
+      "dom",
+      "dom.iterable"
+    ],
     "allowJs": true,
     "skipLibCheck": true,
     "strict": true,
@@ -13,23 +17,36 @@
     "isolatedModules": true,
     "jsx": "preserve",
     "incremental": true,
-    "plugins": [{ "name": "next" }],
-    "types": ["@cloudflare/workers-types"],
+    "plugins": [
+      {
+        "name": "next"
+      }
+    ],
+    "types": [
+      "@cloudflare/workers-types"
+    ],
     "paths": {
-      "@/*": ["./*"]
+      "@/*": [
+        "./*"
+      ]
     }
   },
   "include": [
-    "next-env.d.ts",
+    ".next/types/**/*.ts",
     "app/**/*.ts",
     "app/**/*.tsx",
+    "cf-env.d.ts",
     "components/**/*.ts",
     "components/**/*.tsx",
     "lib/supabase-browser.ts",
-    "types/**/*.ts",
-    "cf-env.d.ts",
+    "next-env.d.ts",
     "next.config.ts",
-    ".next/types/**/*.ts"
+    "types/**/*.ts",
+    ".next-runtime/types/**/*.ts"
   ],
-  "exclude": ["node_modules", "functions/**", "workers/**"]
+  "exclude": [
+    "node_modules",
+    "functions/**",
+    "workers/**"
+  ]
 }
