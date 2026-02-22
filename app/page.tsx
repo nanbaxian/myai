@@ -9,6 +9,7 @@ import PersonaSwitcher from '@/components/PersonaSwitcher'
 import ChatHistoryPanel from '@/components/ChatHistoryPanel'
 import VoiceCallOverlay from '@/components/VoiceCallOverlay'
 import { Persona, Message, ReplyLanguage } from '@/types'
+import { apiUrl } from '@/lib/api-url'
 
 type Modal = 'persona' | 'memory' | 'switcher' | null
 
@@ -32,7 +33,7 @@ export default function Home() {
   const [voiceCallOpen, setVoiceCallOpen] = useState(false)
 
   useEffect(() => {
-    fetch('/api/personas/active')
+    fetch(apiUrl('/api/personas/active'))
       .then(r => {
         if (!r.ok) throw new Error('load failed')
         return r.json() as Promise<Persona>
@@ -85,7 +86,7 @@ export default function Home() {
     setMessages(prev => [...prev, userMsg, typingMsg])
 
     try {
-      const res = await fetch('/api/chat', {
+      const res = await fetch(apiUrl('/api/chat'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ message: text, imageUrl, replyLanguage: lang }),

@@ -6,6 +6,7 @@
 import { useState, useEffect } from 'react'
 
 import type { CoreMemory, MemorySnapshot as Snapshot } from '@/types'
+import { apiUrl } from '@/lib/api-url'
 
 interface Props { onClose: () => void }
 
@@ -34,8 +35,8 @@ export default function MemoryManager({ onClose }: Props) {
     setLoading(true)
     try {
       const [cRes, sRes] = await Promise.all([
-        fetch('/api/memory/core'),
-        fetch('/api/memory/snapshots'),
+        fetch(apiUrl('/api/memory/core')),
+        fetch(apiUrl('/api/memory/snapshots')),
       ])
       if (cRes.ok) setCore((await cRes.json()) as CoreMemory[])
       if (sRes.ok) setSnapshots((await sRes.json()) as Snapshot[])
@@ -49,7 +50,7 @@ export default function MemoryManager({ onClose }: Props) {
   async function deleteCore(id: string) {
     setDeleting(id)
     try {
-      const res = await fetch(`/api/memory/core?id=${id}`, { method: 'DELETE' })
+      const res = await fetch(apiUrl(`/api/memory/core?id=${id}`), { method: 'DELETE' })
       if (!res.ok) throw new Error('删除失败')
       setCore(prev => prev.filter(m => m.id !== id))
     } catch {
@@ -62,7 +63,7 @@ export default function MemoryManager({ onClose }: Props) {
   async function deleteSnapshot(id: string) {
     setDeleting(id)
     try {
-      const res = await fetch(`/api/memory/snapshots?id=${id}`, { method: 'DELETE' })
+      const res = await fetch(apiUrl(`/api/memory/snapshots?id=${id}`), { method: 'DELETE' })
       if (!res.ok) throw new Error('删除失败')
       setSnapshots(prev => prev.filter(s => s.id !== id))
     } catch {
@@ -76,7 +77,7 @@ export default function MemoryManager({ onClose }: Props) {
     setCompress(true)
     setMsg('')
     try {
-      const res = await fetch('/api/memory/compress', {
+      const res = await fetch(apiUrl('/api/memory/compress'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
       })

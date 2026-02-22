@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react'
 import { Persona } from '@/types'
+import { apiUrl } from '@/lib/api-url'
 
 interface Props {
   persona: Persona | null
@@ -42,7 +43,7 @@ export default function PersonaModal({ persona, onSave, onClose }: Props) {
     setSaving(true)
 
     try {
-      const res = await fetch('/api/persona', {
+      const res = await fetch(apiUrl('/api/persona'), {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name, avatar, prompt, reply_style: replyStyle }),

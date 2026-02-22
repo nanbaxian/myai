@@ -5,6 +5,7 @@
 
 import { useState, useEffect } from 'react'
 import { Persona } from '@/types'
+import { apiUrl } from '@/lib/api-url'
 
 interface Props {
   currentPersona: Persona | null
@@ -49,7 +50,7 @@ export default function PersonaSwitcher({ currentPersona, onSwitch, onClose }: P
   async function loadPersonas() {
     setLoading(true)
     try {
-      const res = await fetch('/api/personas')
+      const res = await fetch(apiUrl('/api/personas'))
       if (!res.ok) throw new Error('加载失败')
       const data = (await res.json()) as Persona[]
       setPersonas(Array.isArray(data) ? data : [])
@@ -65,7 +66,7 @@ export default function PersonaSwitcher({ currentPersona, onSwitch, onClose }: P
     setSwitching(persona.id)
     setError('')
     try {
-      const res = await fetch('/api/personas/active', {
+      const res = await fetch(apiUrl('/api/personas/active'), {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ persona_id: persona.id }),
@@ -84,7 +85,7 @@ export default function PersonaSwitcher({ currentPersona, onSwitch, onClose }: P
     setSaving(true)
     setError('')
     try {
-      const res = await fetch('/api/personas', {
+      const res = await fetch(apiUrl('/api/personas'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(preset),
@@ -106,7 +107,7 @@ export default function PersonaSwitcher({ currentPersona, onSwitch, onClose }: P
     setSaving(true)
     setError('')
     try {
-      const res = await fetch('/api/personas', {
+      const res = await fetch(apiUrl('/api/personas'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name: newName, avatar: newAvatar, prompt: newPrompt, reply_style: 'medium' }),
@@ -131,7 +132,7 @@ export default function PersonaSwitcher({ currentPersona, onSwitch, onClose }: P
     if (!confirm('确认删除这个人设？')) return
     setError('')
     try {
-      const res = await fetch(`/api/personas?id=${id}`, { method: 'DELETE' })
+      const res = await fetch(apiUrl(`/api/personas?id=${id}`), { method: 'DELETE' })
       if (!res.ok) throw new Error('删除失败')
       setPersonas(prev => prev.filter(p => p.id !== id))
     } catch {

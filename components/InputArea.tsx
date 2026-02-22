@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { ImageIcon, Loader2, Mic, MicOff, SendHorizontal, X } from 'lucide-react'
 import { Persona, ReplyLanguage } from '@/types'
 import { supabase } from '@/lib/supabase-browser'
+import { apiUrl } from '@/lib/api-url'
 
 interface Props {
   onSend: (text: string, imageUrl?: string, imagePreviewUrl?: string, replyLanguage?: ReplyLanguage) => void
@@ -17,7 +18,7 @@ interface Props {
 async function uploadFileToR2(file: File, token: string): Promise<{ url: string }> {
   const form = new FormData()
   form.append('file', file)
-  const res = await fetch('/api/upload', {
+  const res = await fetch(apiUrl('/api/upload'), {
     method: 'POST',
     headers: { Authorization: `Bearer ${token}` },
     body: form,
@@ -131,7 +132,7 @@ export default function InputArea({
           const audioFile = blobToFile(blob, `recording.${ext}`)
           const up = await uploadFileToR2(audioFile, token)
 
-          const res = await fetch('/api/voice', {
+          const res = await fetch(apiUrl('/api/voice'), {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
