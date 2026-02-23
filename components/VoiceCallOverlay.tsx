@@ -42,6 +42,43 @@ function getAudioLevel(analyser: AnalyserNode): number {
   return Math.sqrt(sum / data.length)
 }
 
+async function speakWithBrowserTts(text: string, lang: ReplyLanguage): Promise<boolean> {
+  if (typeof window === 'undefined' || !('speechSynthesis' in window)) return false
+  const synth = window.speechSynthesis
+  if (!synth) return false
+
+  const voiceLangPrefix = lang === 'zh' ? 'zh' : 'en'
+  const pickVoice = () => {
+    const voices = synth.getVoices()
+    if (!voices.length) return null
+    return voices.find(v => v.lang.toLowerCase().startsWith(voiceLangPrefix)) || null
+  }
+
+  let voice = pickVoice()
+  if (!voice) {
+    await new Promise<void>(resolve => {
+      const done = () => {
+        synth.removeEventListener('voiceschanged', done)
+        resolve()
+      }
+      synth.addEventListener('voiceschanged', done, { once: true })
+      window.setTimeout(done, 400)
+    })
+    voice = pickVoice()
+  }
+
+  const utter = new SpeechSynthesisUtterance(text.slice(0, 1200))
+  utter.lang = lang === 'zh' ? 'zh-CN' : 'en-US'
+  if (voice) utter.voice = voice
+
+  return await new Promise<boolean>(resolve => {
+    utter.onend = () => resolve(true)
+    utter.onerror = () => resolve(false)
+    synth.cancel()
+    synth.speak(utter)
+  })
+}
+
 export default function VoiceCallOverlay({ persona, isOpen, onClose, replyLanguage, onVoiceTurn }: Props) {
   const [isMuted, setIsMuted] = useState(false)
   const [isSpeakerOff, setIsSpeakerOff] = useState(false)
@@ -99,6 +136,9 @@ export default function VoiceCallOverlay({ persona, isOpen, onClose, replyLangua
   }, [])
 
   const stopOutputAudio = useCallback(() => {
+    if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+      window.speechSynthesis.cancel()
+    }
     const audio = outputAudioRef.current
     if (audio) {
       audio.pause()
@@ -176,41 +216,63 @@ export default function VoiceCallOverlay({ persona, isOpen, onClose, replyLangua
 
   const speakText = useCallback(async (text: string, token: string, lang: ReplyLanguage) => {
     if (isSpeakerOffRef.current) return
-    const q = new URLSearchParams({ text: text.slice(0, 1200), lang, provider: 'deepgram' })
-    const res = await fetch(`${apiUrl('/api/voice')}?${q.toString()}`, {
-      headers: { Authorization: `Bearer ${token}` },
-    })
-    if (!res.ok) throw new Error('TTS failed')
+    if (lang === 'zh') {
+      const ok = await speakWithBrowserTts(text, lang)
+      if (ok) return
+    }
 
-    const blob = await res.blob()
-    if (!blob.size) return
+    const providers = lang === 'zh'
+      ? (['elevenlabs', 'google', 'deepgram'] as const)
+      : (['deepgram', 'elevenlabs', 'google'] as const)
 
-    stopOutputAudio()
-    const objectUrl = URL.createObjectURL(blob)
-    const audio = new Audio(objectUrl)
-    outputAudioRef.current = audio
-    outputAudioUrlRef.current = objectUrl
+    let lastError: Error | null = null
+    for (const provider of providers) {
+      try {
+        const q = new URLSearchParams({ text: text.slice(0, 1200), lang, provider })
+        const res = await fetch(`${apiUrl('/api/voice')}?${q.toString()}`, {
+          headers: { Authorization: `Bearer ${token}` },
+        })
+        if (!res.ok) {
+          throw new Error(`TTS provider failed: ${provider}`)
+        }
 
-    await new Promise<void>((resolve, reject) => {
-      const cleanup = () => {
-        audio.onended = null
-        audio.onerror = null
+        const blob = await res.blob()
+        if (!blob.size) continue
+
+        stopOutputAudio()
+        const objectUrl = URL.createObjectURL(blob)
+        const audio = new Audio(objectUrl)
+        outputAudioRef.current = audio
+        outputAudioUrlRef.current = objectUrl
+
+        await new Promise<void>((resolve, reject) => {
+          const cleanup = () => {
+            audio.onended = null
+            audio.onerror = null
+          }
+          audio.onended = () => {
+            cleanup()
+            resolve()
+          }
+          audio.onerror = () => {
+            cleanup()
+            reject(new Error('Playback failed'))
+          }
+          void audio.play().catch(err => {
+            cleanup()
+            reject(err)
+          })
+        }).finally(() => {
+          stopOutputAudio()
+        })
+
+        return
+      } catch (e) {
+        lastError = e instanceof Error ? e : new Error('Unknown TTS error')
       }
-      audio.onended = () => {
-        cleanup()
-        resolve()
-      }
-      audio.onerror = () => {
-        cleanup()
-        reject(new Error('Playback failed'))
-      }
-      void audio.play().catch(err => {
-        cleanup()
-        reject(err)
-      })
-    }).finally(() => {
-      stopOutputAudio()
-    })
+    }
+
+    throw lastError || new Error('All TTS providers failed')
   }, [stopOutputAudio])
 
   const processUserTurn = useCallback(async (blob: Blob, durationSeconds: number) => {
