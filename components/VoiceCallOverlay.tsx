@@ -73,17 +73,18 @@ async function speakWithBrowserTts(text: string, lang: ReplyLanguage): Promise<b
     })
     voice = pickVoice()
   }
-  if (!voice) return false
 
   const utter = new SpeechSynthesisUtterance(text.slice(0, 1200))
   utter.lang = lang === 'zh' ? 'zh-CN' : 'en-US'
   if (voice) utter.voice = voice
 
   return await new Promise<boolean>(resolve => {
+    utter.onstart = () => resolve(true)
     utter.onend = () => resolve(true)
     utter.onerror = () => resolve(false)
     synth.cancel()
     synth.speak(utter)
+    window.setTimeout(() => resolve(Boolean(synth.speaking || synth.pending)), 250)
   })
 }
 
