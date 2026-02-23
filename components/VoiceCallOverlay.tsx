@@ -224,54 +224,13 @@ export default function VoiceCallOverlay({ persona, isOpen, onClose, replyLangua
     return stream
   }, [])
 
-  const speakText = useCallback(async (text: string, token: string, lang: ReplyLanguage) => {
+  const speakText = useCallback(async (text: string, _token: string, lang: ReplyLanguage) => {
     if (isSpeakerOffRef.current) return
     const seq = ++speakSeqRef.current
-    if (lang === 'zh') {
-      const ok = await speakWithBrowserTts(text, lang)
-      if (ok) return
-    }
-
-    const provider = lang === 'zh' ? 'elevenlabs' : 'deepgram'
-    const q = new URLSearchParams({ text: text.slice(0, 1200), lang, provider })
-    const res = await fetch(`${apiUrl('/api/voice')}?${q.toString()}`, {
-      headers: { Authorization: `Bearer ${token}` },
-    })
-    if (!res.ok) {
-      throw new Error(`TTS provider failed: ${provider}`)
-    }
-
-    const blob = await res.blob()
-    if (!blob.size) throw new Error('Empty TTS audio')
+    const ok = await speakWithBrowserTts(text, lang)
     if (seq !== speakSeqRef.current) return
-
-    stopOutputAudio()
-    const objectUrl = URL.createObjectURL(blob)
-    const audio = new Audio(objectUrl)
-    outputAudioRef.current = audio
-    outputAudioUrlRef.current = objectUrl
-
-    await new Promise<void>((resolve, reject) => {
-      const cleanup = () => {
-        audio.onended = null
-        audio.onerror = null
-      }
-      audio.onended = () => {
-        cleanup()
-        resolve()
-      }
-      audio.onerror = () => {
-        cleanup()
-        reject(new Error('Playback failed'))
-      }
-      void audio.play().catch(err => {
-        cleanup()
-        reject(err)
-      })
-    }).finally(() => {
-      stopOutputAudio()
-    })
-  }, [stopOutputAudio])
+    if (!ok) throw new Error('Browser TTS unavailable')
+  }, [])
 
   const processUserTurn = useCallback(async (blob: Blob, durationSeconds: number) => {
     if (processingRef.current || !callActiveRef.current) return
