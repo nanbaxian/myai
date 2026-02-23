@@ -42,6 +42,13 @@ function getAudioLevel(analyser: AnalyserNode): number {
   return Math.sqrt(sum / data.length)
 }
 
+const VAD_SAMPLE_MS = 100
+const VAD_MIN_VOICED_MS = 450
+const VAD_MAX_SILENT_WAIT_MS = 10000
+const VAD_STOP_SILENCE_MS = 900
+const VAD_MIN_PEAK_ABS = 0.045
+const VAD_THRESHOLD_FLOOR = 0.028
+
 async function speakWithBrowserTts(text: string, lang: ReplyLanguage): Promise<boolean> {
   if (typeof window === 'undefined' || !('speechSynthesis' in window)) return false
   const synth = window.speechSynthesis
@@ -354,6 +361,10 @@ export default function VoiceCallOverlay({ persona, isOpen, onClose, replyLangua
         const startedAt = Date.now()
         let hasVoice = false
         let lastVoiceAt = 0
+        let voicedMs = 0
+        let peakLevel = 0
+        let noiseFloor = 0.008
+        let adaptiveThreshold = VAD_THRESHOLD_FLOOR
 
         recorder.ondataavailable = event => {
           if (event.data.size > 0) chunks.push(event.data)
@@ -371,7 +382,7 @@ export default function VoiceCallOverlay({ persona, isOpen, onClose, replyLangua
           const elapsedMs = Date.now() - startedAt
           const elapsedSec = Math.max(1, Math.ceil(elapsedMs / 1000))
           // Filter out noise taps and ultra-short clips before hitting STT.
-          if (!hasVoice || chunks.length === 0 || elapsedMs < 700) {
+          if (!hasVoice || chunks.length === 0 || elapsedMs < 700 || voicedMs < VAD_MIN_VOICED_MS) {
             scheduleNextTurn(120)
             return
           }
@@ -393,21 +404,33 @@ export default function VoiceCallOverlay({ persona, isOpen, onClose, replyLangua
           const now = Date.now()
           const analyser = analyserRef.current
           const level = analyser ? getAudioLevel(analyser) : 0
-          const speaking = level > 0.03
+          peakLevel = Math.max(peakLevel, level)
+
+          // Update noise floor when current frame is quiet.
+          if (level < adaptiveThreshold) {
+            noiseFloor = noiseFloor * 0.92 + level * 0.08
+            adaptiveThreshold = Math.max(VAD_THRESHOLD_FLOOR, noiseFloor * 2.7)
+          }
+
+          const speaking = level > adaptiveThreshold
 
           if (speaking) {
-            hasVoice = true
+            voicedMs += VAD_SAMPLE_MS
+            // Effective speech: enough voiced duration + peak level over hard floor.
+            if (voicedMs >= VAD_MIN_VOICED_MS && peakLevel >= VAD_MIN_PEAK_ABS) {
+              hasVoice = true
+            }
             lastVoiceAt = now
           }
 
           const elapsed = now - startedAt
-          if (hasVoice && now - lastVoiceAt > 900 && elapsed > 900) {
+          if (hasVoice && now - lastVoiceAt > VAD_STOP_SILENCE_MS && elapsed > 900) {
             if (recorder.state === 'recording') recorder.stop()
           }
-          if (!hasVoice && elapsed > 15000) {
+          if (!hasVoice && elapsed > VAD_MAX_SILENT_WAIT_MS) {
             if (recorder.state === 'recording') recorder.stop()
           }
-        }, 100)
+        }, VAD_SAMPLE_MS)
       })()
     }, delayMs)
   }, [ensureAudioPipeline, processUserTurn])
