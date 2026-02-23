@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef } from 'react'
 import { Persona, Message, ReplyLanguage } from '@/types'
 import MessageBubble from './MessageBubble'
 import InputArea from './InputArea'
@@ -11,7 +11,9 @@ interface Props {
   messages: Message[]
   replyLanguage: ReplyLanguage
   onReplyLanguageChange: (lang: ReplyLanguage) => void
-  onSendMessage: (text: string, imageBase64?: string, imagePreviewUrl?: string, replyLanguage?: ReplyLanguage) => void
+  onSendMessage: (text: string, imageBase64?: string, imagePreviewUrl?: string, replyLanguage?: ReplyLanguage) => Promise<string | null> | void
+  onStartVoiceCall: () => void
+  voiceCallOpen?: boolean
 }
 
 export default function ChatWindow({
@@ -20,42 +22,46 @@ export default function ChatWindow({
   replyLanguage,
   onReplyLanguageChange,
   onSendMessage,
+  onStartVoiceCall,
+  voiceCallOpen,
 }: Props) {
   const messagesEndRef = useRef<HTMLDivElement>(null)
-  const [lastCompletedAiMsg, setLastCompletedAiMsg] = useState('')
   const isStreaming = messages.some(m => m.is_typing)
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages])
 
-  const lastMsgId = messages.length > 0 ? messages[messages.length - 1].id : ''
-  useEffect(() => {
-    const last = messages[messages.length - 1]
-    if (last?.role === 'assistant' && !last.is_typing && last.content && last.id.startsWith('ai-')) {
-      setLastCompletedAiMsg(last.content)
-    }
-  }, [lastMsgId, messages])
-
   return (
     <div className="flex flex-col flex-1 min-w-0 h-full">
       <header className="flex items-center gap-3.5 px-6 py-4 border-b border-border bg-card/50 backdrop-blur-sm flex-shrink-0">
         <div className="w-10 h-10 rounded-full bg-primary/15 border border-primary/25 flex items-center justify-center text-lg shadow-[0_0_15px_hsl(var(--glow-primary)/0.15)]">
-          {persona?.avatar || '✨'}
+          {persona?.avatar || '*'}
         </div>
         <div className="flex-1 min-w-0">
-          <h2 className="font-serif text-base text-foreground truncate">{persona?.name || '加载中...'}</h2>
+          <h2 className="font-serif text-base text-foreground truncate">{persona?.name || 'Loading...'}</h2>
           <div className="text-xs text-muted-foreground mt-0.5">
             {isStreaming ? (
-              <span className="text-primary animate-pulse">正在输入...</span>
+              <span className="text-primary animate-pulse">Typing...</span>
             ) : (
               <div className="flex items-center gap-1.5">
                 <div className="w-1.5 h-1.5 rounded-full bg-primary glow-dot" />
-                <span>在线 · 等待你</span>
+                <span>Online</span>
               </div>
             )}
           </div>
         </div>
+
+        <select
+          value={replyLanguage}
+          onChange={e => onReplyLanguageChange(e.target.value as ReplyLanguage)}
+          className="h-9 rounded-lg border border-border bg-secondary/40 px-2 text-[12px] lowercase text-muted-foreground outline-none focus:border-primary/40"
+          title="Language"
+          disabled={isStreaming}
+        >
+          <option value="zh">cn</option>
+          <option value="en">en</option>
+        </select>
       </header>
 
       <div className="flex-1 overflow-y-auto px-4 md:px-6 py-4 space-y-4 scrollbar-thin">
@@ -67,12 +73,12 @@ export default function ChatWindow({
             className="flex flex-col items-center justify-center h-full text-center py-20"
           >
             <div className="w-20 h-20 rounded-full bg-primary/10 border border-primary/20 flex items-center justify-center text-3xl mb-6 animate-float">
-              {persona.avatar || '✨'}
+              {persona.avatar || '*'}
             </div>
             <h3 className="font-serif text-xl text-foreground mb-2">{persona.name}</h3>
-            <p className="text-muted-foreground text-sm max-w-md leading-relaxed">说声你好，开始聊天吧 ✨</p>
+            <p className="text-muted-foreground text-sm max-w-md leading-relaxed">Say hi and start chatting.</p>
             <div className="flex flex-wrap gap-2 mt-6 justify-center">
-              {['你好呀 👋', '今天心情怎么样？', '给我讲个故事'].map((hint, i) => (
+              {['Hello', 'How are you today?', 'Tell me a story'].map((hint, i) => (
                 <button
                   key={i}
                   onClick={() => onSendMessage(hint)}
@@ -96,9 +102,8 @@ export default function ChatWindow({
         onSend={onSendMessage}
         disabled={isStreaming}
         persona={persona}
-        replyLanguage={replyLanguage}
-        onReplyLanguageChange={onReplyLanguageChange}
-        lastAiMessage={lastCompletedAiMsg}
+        onStartVoiceCall={onStartVoiceCall}
+        voiceCallOpen={voiceCallOpen}
       />
     </div>
   )

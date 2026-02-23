@@ -15,10 +15,10 @@ type Modal = 'persona' | 'memory' | 'switcher' | null
 
 const DEFAULT_PERSONA: Persona = {
   id: 'default',
-  name: '晓雨',
-  avatar: '🌸',
+  name: 'Xiaoyu',
+  avatar: '*',
   reply_style: 'medium',
-  prompt: '你叫晓雨，是一个25岁的女生。你温柔体贴，善解人意，有一种让人如沐春风的亲切感。',
+  prompt: 'You are Xiaoyu, a warm and empathetic companion.',
 }
 
 export default function Home() {
@@ -61,8 +61,8 @@ export default function Home() {
     imageUrl?: string,
     imagePreviewUrl?: string,
     lang: ReplyLanguage = replyLanguage,
-  ) => {
-    if (!text && !imageUrl) return
+  ): Promise<string | null> => {
+    if (!text && !imageUrl) return null
 
     const userMsg: Message = {
       id: 'user-' + Date.now(),
@@ -94,7 +94,9 @@ export default function Home() {
 
       if (!res.ok) throw new Error('API error')
 
-      const reader = res.body!.getReader()
+      const reader = res.body?.getReader()
+      if (!reader) throw new Error('No stream body')
+
       const decoder = new TextDecoder()
       let aiContent = ''
       let started = false
@@ -113,24 +115,20 @@ export default function Home() {
         for (const line of lines) {
           if (!line.startsWith('data: ')) continue
           try {
-            const data = JSON.parse(line.slice(6))
+            const data = JSON.parse(line.slice(6)) as { text?: string; error?: string; done?: boolean }
             if (data.text) {
               aiContent += data.text
               if (!started) {
                 started = true
-                setMessages(prev =>
-                  prev.map(m => (m.id === typingId ? { ...m, is_typing: false, content: aiContent } : m)),
-                )
+                setMessages(prev => prev.map(m => (m.id === typingId ? { ...m, is_typing: false, content: aiContent } : m)))
               } else {
                 setMessages(prev => prev.map(m => (m.id === typingId ? { ...m, content: aiContent } : m)))
               }
             }
-            if (data.error) {
-              streamError = String(data.error)
-            }
+            if (data.error) streamError = String(data.error)
             if (data.done) {
               finished = true
-              const finalText = aiContent || '我这边暂时没有生成出内容，换个说法再试试。'
+              const finalText = aiContent || 'I could not generate content, please try again.'
               setMessages(prev =>
                 prev.map(m =>
                   m.id === typingId
@@ -139,6 +137,7 @@ export default function Home() {
                 ),
               )
               setSidebarRefreshKey(k => k + 1)
+              return finalText
             }
           } catch {
             // ignore invalid chunks
@@ -154,25 +153,29 @@ export default function Home() {
                   ...m,
                   is_typing: false,
                   id: 'err-' + Date.now(),
-                  content: streamError ? `请求失败：${streamError}` : '暂时没有拿到回复，请再试一次。',
+                  content: streamError ? `Request failed: ${streamError}` : 'No reply received, please retry.',
                 }
               : m,
           ),
         )
       }
+      return null
     } catch {
       setMessages(prev =>
         prev.map(m =>
-          m.id === typingId ? { ...m, is_typing: false, id: 'err-' + Date.now(), content: '出了点小问题，再试一次？' } : m,
+          m.id === typingId
+            ? { ...m, is_typing: false, id: 'err-' + Date.now(), content: 'Something went wrong, please retry.' }
+            : m,
         ),
       )
+      return null
     }
   }
 
   if (loading) {
     return (
       <div className="flex h-screen items-center justify-center bg-background">
-        <div className="text-muted-foreground text-sm animate-pulse">正在加载...</div>
+        <div className="text-muted-foreground text-sm animate-pulse">Loading...</div>
       </div>
     )
   }
@@ -199,6 +202,8 @@ export default function Home() {
         replyLanguage={replyLanguage}
         onReplyLanguageChange={setReplyLanguage}
         onSendMessage={handleSendMessage}
+        onStartVoiceCall={() => setVoiceCallOpen(true)}
+        voiceCallOpen={voiceCallOpen}
       />
 
       {modal === 'persona' && (
@@ -218,7 +223,15 @@ export default function Home() {
         <PersonaSwitcher currentPersona={activePersona} onSwitch={handlePersonaSwitch} onClose={() => setModal(null)} />
       )}
 
-      {voiceCallOpen && <VoiceCallOverlay persona={activePersona} isOpen={voiceCallOpen} onClose={() => setVoiceCallOpen(false)} />}
+      {voiceCallOpen && (
+        <VoiceCallOverlay
+          persona={activePersona}
+          isOpen={voiceCallOpen}
+          onClose={() => setVoiceCallOpen(false)}
+          replyLanguage={replyLanguage}
+          onVoiceTurn={(text, lang) => handleSendMessage(text, undefined, undefined, lang)}
+        />
+      )}
     </div>
   )
 }
