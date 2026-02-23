@@ -44,10 +44,14 @@ function getAudioLevel(analyser: AnalyserNode): number {
 
 const VAD_SAMPLE_MS = 100
 const VAD_MIN_VOICED_MS = 450
+const VAD_MIN_VOICED_MS_FIRST = 220
 const VAD_MAX_SILENT_WAIT_MS = 10000
 const VAD_STOP_SILENCE_MS = 900
 const VAD_MIN_PEAK_ABS = 0.045
-const VAD_THRESHOLD_FLOOR = 0.028
+const VAD_MIN_PEAK_ABS_FIRST = 0.03
+const VAD_THRESHOLD_FLOOR = 0.02
+const VAD_THRESHOLD_FLOOR_FIRST = 0.016
+const VAD_THRESHOLD_CEIL = 0.05
 
 async function speakWithBrowserTts(text: string, lang: ReplyLanguage): Promise<boolean> {
   if (typeof window === 'undefined' || !('speechSynthesis' in window)) return false
@@ -55,12 +59,23 @@ async function speakWithBrowserTts(text: string, lang: ReplyLanguage): Promise<b
   if (!synth) return false
 
   const voiceLangPrefix = lang === 'zh' ? 'zh' : 'en'
-  const pickVoice = () => {
+  const pickVoice = (): SpeechSynthesisVoice | null => {
     const voices = synth.getVoices()
     if (!voices.length) return null
-    return voices.find(v => v.lang.toLowerCase().startsWith(voiceLangPrefix)) || null
+    const lower = voices.map(v => ({ raw: v, lang: v.lang.toLowerCase() }))
+    if (lang === 'zh') {
+      return (
+        lower.find(v => v.lang === 'zh-cn')?.raw ||
+        lower.find(v => v.lang.startsWith('zh-'))?.raw ||
+        lower.find(v => v.lang.startsWith('zh'))?.raw ||
+        voices[0] ||
+        null
+      )
+    }
+    return lower.find(v => v.lang.startsWith(voiceLangPrefix))?.raw || voices[0] || null
   }
 
+  // Chrome may lazily populate voices; wait a bit for first list.
   let voice = pickVoice()
   if (!voice) {
     await new Promise<void>(resolve => {
@@ -69,22 +84,44 @@ async function speakWithBrowserTts(text: string, lang: ReplyLanguage): Promise<b
         resolve()
       }
       synth.addEventListener('voiceschanged', done, { once: true })
-      window.setTimeout(done, 400)
+      window.setTimeout(done, 1200)
     })
     voice = pickVoice()
   }
 
   const utter = new SpeechSynthesisUtterance(text.slice(0, 1200))
   utter.lang = lang === 'zh' ? 'zh-CN' : 'en-US'
+  utter.volume = 1
+  utter.rate = 1
+  utter.pitch = 1
   if (voice) utter.voice = voice
 
   return await new Promise<boolean>(resolve => {
-    utter.onstart = () => resolve(true)
-    utter.onend = () => resolve(true)
-    utter.onerror = () => resolve(false)
+    let settled = false
+    const settle = (ok: boolean) => {
+      if (settled) return
+      settled = true
+      resolve(ok)
+    }
+    utter.onend = () => settle(true)
+    utter.onerror = () => settle(false)
+    utter.onpause = () => synth.resume()
+
+    // Avoid cancel->speak race in Chromium.
     synth.cancel()
-    synth.speak(utter)
-    window.setTimeout(() => resolve(Boolean(synth.speaking || synth.pending)), 250)
+    window.setTimeout(() => {
+      try {
+        synth.resume()
+        synth.speak(utter)
+      } catch {
+        settle(false)
+      }
+    }, 40)
+
+    // Hard timeout: if still not speaking, count as failed.
+    window.setTimeout(() => settle(Boolean(synth.speaking || synth.pending)), 1200)
+    // Max utterance timeout protection.
+    window.setTimeout(() => settle(true), 20000)
   })
 }
 
@@ -111,6 +148,7 @@ export default function VoiceCallOverlay({ persona, isOpen, onClose, replyLangua
   const isSpeakerOffRef = useRef(false)
   const aiSpeakingRef = useRef(false)
   const speakSeqRef = useRef(0)
+  const turnCountRef = useRef(0)
   const replyLanguageRef = useRef<ReplyLanguage>(replyLanguage)
 
   useEffect(() => {
@@ -324,7 +362,8 @@ export default function VoiceCallOverlay({ persona, isOpen, onClose, replyLangua
         let voicedMs = 0
         let peakLevel = 0
         let noiseFloor = 0.008
-        let adaptiveThreshold = VAD_THRESHOLD_FLOOR
+        const isFirstTurn = turnCountRef.current === 0
+        let adaptiveThreshold = isFirstTurn ? VAD_THRESHOLD_FLOOR_FIRST : VAD_THRESHOLD_FLOOR
 
         recorder.ondataavailable = event => {
           if (event.data.size > 0) chunks.push(event.data)
@@ -342,13 +381,15 @@ export default function VoiceCallOverlay({ persona, isOpen, onClose, replyLangua
           const elapsedMs = Date.now() - startedAt
           const elapsedSec = Math.max(1, Math.ceil(elapsedMs / 1000))
           // Filter out noise taps and ultra-short clips before hitting STT.
-          if (!hasVoice || chunks.length === 0 || elapsedMs < 700 || voicedMs < VAD_MIN_VOICED_MS) {
+          const minVoicedMs = isFirstTurn ? VAD_MIN_VOICED_MS_FIRST : VAD_MIN_VOICED_MS
+          if (!hasVoice || chunks.length === 0 || elapsedMs < 650 || voicedMs < minVoicedMs) {
             scheduleNextTurn(120)
             return
           }
 
           const blob = new Blob(chunks, { type: mimeType })
           await processUserTurn(blob, elapsedSec)
+          turnCountRef.current += 1
           scheduleNextTurn(120)
         }
 
@@ -369,7 +410,8 @@ export default function VoiceCallOverlay({ persona, isOpen, onClose, replyLangua
           // Update noise floor when current frame is quiet.
           if (level < adaptiveThreshold) {
             noiseFloor = noiseFloor * 0.92 + level * 0.08
-            adaptiveThreshold = Math.max(VAD_THRESHOLD_FLOOR, noiseFloor * 2.7)
+            const floor = isFirstTurn ? VAD_THRESHOLD_FLOOR_FIRST : VAD_THRESHOLD_FLOOR
+            adaptiveThreshold = Math.min(VAD_THRESHOLD_CEIL, Math.max(floor, noiseFloor * 2.2))
           }
 
           const speaking = level > adaptiveThreshold
@@ -377,7 +419,9 @@ export default function VoiceCallOverlay({ persona, isOpen, onClose, replyLangua
           if (speaking) {
             voicedMs += VAD_SAMPLE_MS
             // Effective speech: enough voiced duration + peak level over hard floor.
-            if (voicedMs >= VAD_MIN_VOICED_MS && peakLevel >= VAD_MIN_PEAK_ABS) {
+            const minVoicedMs = isFirstTurn ? VAD_MIN_VOICED_MS_FIRST : VAD_MIN_VOICED_MS
+            const minPeak = isFirstTurn ? VAD_MIN_PEAK_ABS_FIRST : VAD_MIN_PEAK_ABS
+            if (voicedMs >= minVoicedMs && peakLevel >= minPeak) {
               hasVoice = true
             }
             lastVoiceAt = now
@@ -398,6 +442,7 @@ export default function VoiceCallOverlay({ persona, isOpen, onClose, replyLangua
   useEffect(() => {
     if (!isOpen) {
       callActiveRef.current = false
+      turnCountRef.current = 0
       fullCleanup()
       setCallDuration(0)
       setIsProcessing(false)
@@ -408,6 +453,7 @@ export default function VoiceCallOverlay({ persona, isOpen, onClose, replyLangua
     }
 
     callActiveRef.current = true
+    turnCountRef.current = 0
     setCallDuration(0)
     setCallError('')
     setLastHeardText('')
