@@ -75,6 +75,9 @@ export const dictionaries = {
       magicLink: 'Magic Link',
       sent: '已发送，请查收邮箱',
       sendFailed: '发送失败，请重试',
+      callbackLoading: '正在完成登录...',
+      callbackSuccess: '登录成功，正在跳转...',
+      callbackFailed: '登录失败，请重新打开邮件链接或再次发送 Magic Link。',
     },
     history: {
       title: '聊天记录',
@@ -250,6 +253,9 @@ export const dictionaries = {
       magicLink: 'Magic Link',
       sent: 'Sent. Check your inbox.',
       sendFailed: 'Send failed. Please try again.',
+      callbackLoading: 'Completing sign-in...',
+      callbackSuccess: 'Signed in. Redirecting...',
+      callbackFailed: 'Sign-in failed. Please reopen the email link or request a new Magic Link.',
     },
     history: {
       title: 'Chat History',

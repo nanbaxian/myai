@@ -3,13 +3,14 @@
 import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '@/lib/supabase-browser'
 import { useI18n } from '@/lib/i18n/context'
+import { getSiteUrl } from '@/lib/i18n/config'
 
 type Props = {
   className?: string
 }
 
 export default function AuthWidget({ className }: Props) {
-  const { t } = useI18n()
+  const { locale, t } = useI18n()
   const [email, setEmail] = useState('')
   const [status, setStatus] = useState<'idle' | 'sending' | 'sent' | 'error'>('idle')
   const [sessionEmail, setSessionEmail] = useState<string | null>(null)
@@ -40,10 +41,16 @@ export default function AuthWidget({ className }: Props) {
     if (!email.trim()) return
     setStatus('sending')
     try {
+      const redirectBase =
+        process.env.NEXT_PUBLIC_AUTH_REDIRECT_URL ||
+        (typeof window !== 'undefined' ? window.location.origin : getSiteUrl())
+      const callbackUrl = new URL('/auth/callback', redirectBase)
+      callbackUrl.searchParams.set('locale', locale)
+
       const { error } = await supabase.auth.signInWithOtp({
         email: email.trim(),
         options: {
-          emailRedirectTo: window.location.origin,
+          emailRedirectTo: callbackUrl.toString(),
         },
       })
       if (error) throw error
