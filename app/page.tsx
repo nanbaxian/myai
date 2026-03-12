@@ -173,7 +173,13 @@ export default function Home() {
       const res = await fetch(apiUrl('/api/chat'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: text, imageUrl, replyLanguage: lang, session_id: sessionId }),
+        body: JSON.stringify({
+          message: text,
+          imageUrl,
+          replyLanguage: lang,
+          session_id: sessionId,
+          voice_mode: sessionType === 'voice',
+        }),
       })
 
       if (!res.ok) throw new Error('API error')

@@ -15,18 +15,6 @@ interface Props {
   onVoiceTurn: (text: string, lang: ReplyLanguage, sessionType?: 'text' | 'voice') => Promise<string | null>
 }
 
-async function uploadFileToR2(file: File, token: string): Promise<{ url: string }> {
-  const form = new FormData()
-  form.append('file', file)
-  const res = await fetch(apiUrl('/api/upload'), {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${token}` },
-    body: form,
-  })
-  if (!res.ok) throw new Error('Upload failed')
-  return await res.json()
-}
-
 function blobToFile(blob: Blob, filename: string): File {
   return new File([blob], filename, { type: blob.type || 'application/octet-stream' })
 }
@@ -285,19 +273,16 @@ export default function VoiceCallOverlay({ persona, isOpen, onClose, replyLangua
 
       const ext = blob.type.includes('mp4') ? 'mp4' : 'webm'
       const audioFile = blobToFile(blob, `voice-turn.${ext}`)
-      const up = await uploadFileToR2(audioFile, token)
+      const form = new FormData()
+      form.append('audio', audioFile)
 
       const sttRes = await fetch(apiUrl('/api/voice'), {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json',
           Authorization: `Bearer ${token}`,
+          'x-audio-duration-ms': String(Math.max(1000, Math.round(durationSeconds * 1000))),
         },
-        body: JSON.stringify({
-          audioUrl: up.url,
-          durationSeconds,
-          replyLanguage: replyLanguageRef.current,
-        }),
+        body: form,
       })
       if (!sttRes.ok) {
         // 422 means "no valid speech recognized"; treat as a silent turn.

@@ -69,7 +69,14 @@ export const onRequestPost: PagesFunction<Env> = async (ctx) => {
   const debug = true
   apiLog.start({ debug })
   console.log(`[chat ${reqId}] request_start debug=${debug}`)
-  let body: { message?: string; imageBase64?: string; imageUrl?: string; replyLanguage?: ReplyLanguage; session_id?: string }
+  let body: {
+    message?: string
+    imageBase64?: string
+    imageUrl?: string
+    replyLanguage?: ReplyLanguage
+    session_id?: string
+    voice_mode?: boolean
+  }
   try { body = await request.json() }
   catch (e) {
     apiLog.fail(e, { stage: 'parse' })
@@ -77,6 +84,7 @@ export const onRequestPost: PagesFunction<Env> = async (ctx) => {
   }
 
   const { message = '', imageUrl, session_id } = body
+  const voiceMode = body.voice_mode === true
   let { imageBase64 } = body
   const replyLanguage: ReplyLanguage =
     body.replyLanguage === 'en' || body.replyLanguage === 'zh'
@@ -93,7 +101,7 @@ export const onRequestPost: PagesFunction<Env> = async (ctx) => {
   const hasImage = Boolean(imageBase64)
   if (debug) {
     console.log(
-      `[chat ${reqId}] in message_len=${message.length} has_image=${hasImage} lang=${replyLanguage}`
+      `[chat ${reqId}] in message_len=${message.length} has_image=${hasImage} lang=${replyLanguage} voice_mode=${voiceMode}`
     )
   }
 
@@ -121,7 +129,14 @@ export const onRequestPost: PagesFunction<Env> = async (ctx) => {
   const hardLanguageRule = replyLanguage === 'en'
     ? '\n\n# Hard Language Lock\n- You must reply entirely in English.\n- Do not use Chinese characters.\n- Do not call the user by the assistant persona name.'
     : '\n\n# Hard Language Lock\n- 你必须完全使用简体中文回复。\n- 不要使用英文句子（专有名词除外）。\n- 不要把助手人设名字当作用户称呼。'
-  const systemPrompt = buildSystemPrompt(persona, memoryForPrompt, message || '', replyLanguage) + hardLanguageRule
+  const voiceFastReplyRule = voiceMode
+    ? (
+        replyLanguage === 'en'
+          ? '\n\n# Voice Fast Reply Mode\n- This reply is for live voice conversation.\n- Reply in 1 short sentence when possible, never more than 2 short sentences.\n- Prioritize immediate, natural spoken wording.\n- Avoid lists, preambles, and long explanations.\n- If the user asks a complex question, answer the core point first in the shortest useful way.'
+          : '\n\n# Voice Fast Reply Mode\n- 这是实时语音对话回复。\n- 尽量只回 1 句短句，最多 2 句短句。\n- 以口语自然、立刻能说出口为第一优先级。\n- 不要列点，不要铺垫，不要长解释。\n- 如果问题复杂，先用最短方式回答核心点。'
+      )
+    : ''
+  const systemPrompt = buildSystemPrompt(persona, memoryForPrompt, message || '', replyLanguage) + hardLanguageRule + voiceFastReplyRule
   const messages     = buildMessageHistory(memoryForPrompt, message, imageBase64)
   if (debug) {
     console.log(
@@ -146,7 +161,7 @@ export const onRequestPost: PagesFunction<Env> = async (ctx) => {
       .then(() =>
         syncChatSessionFromMessages(sbUrl, sbKey, session_id, {
           persona_id: persona.id,
-          session_type: 'text',
+          session_type: voiceMode ? 'voice' : 'text',
           fallbackTitle: message,
         }),
       )
@@ -154,8 +169,12 @@ export const onRequestPost: PagesFunction<Env> = async (ctx) => {
   }
 
   // ⑤ 调用 Gemini 流式
-  const maxOutputTokens = Number.parseInt(env.DEEPINFRA_MAX_TOKENS || '', 10)
-  const coalesceChars = Number.parseInt(env.DEEPINFRA_COALESCE_CHARS || '', 10)
+  const maxOutputTokens = voiceMode
+    ? 96
+    : Number.parseInt(env.DEEPINFRA_MAX_TOKENS || '', 10)
+  const coalesceChars = voiceMode
+    ? 6
+    : Number.parseInt(env.DEEPINFRA_COALESCE_CHARS || '', 10)
   const deepinfraModel = env.DEEPINFRA_MODEL || 'meta-llama/Llama-3.2-3B-Instruct'
   const visionModel = env.GEMINI_VISION_MODEL || 'gemini-2.5-flash-lite'
   const provider = hasImage ? 'gemini' : 'deepinfra'
@@ -226,7 +245,7 @@ export const onRequestPost: PagesFunction<Env> = async (ctx) => {
                     if (!session_id) return
                     return syncChatSessionFromMessages(sbUrl, sbKey, session_id, {
                       persona_id: persona.id,
-                      session_type: 'text',
+                      session_type: voiceMode ? 'voice' : 'text',
                       fallbackTitle: message,
                     })
                   })
@@ -255,7 +274,7 @@ export const onRequestPost: PagesFunction<Env> = async (ctx) => {
                   if (!session_id) return
                   return syncChatSessionFromMessages(sbUrl, sbKey, session_id, {
                     persona_id: persona.id,
-                    session_type: 'text',
+                    session_type: voiceMode ? 'voice' : 'text',
                     fallbackTitle: message,
                   })
                 })
