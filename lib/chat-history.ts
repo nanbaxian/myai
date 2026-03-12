@@ -11,7 +11,7 @@ type SessionRow = {
   is_pinned?: boolean | null
   created_at: string
   updated_at?: string
-  personas?: Pick<Persona, 'name' | 'avatar'> | null
+  personas?: Pick<Persona, 'name' | 'name_en' | 'avatar'> | null
 }
 
 function sbHeaders(key: string): Record<string, string> {
@@ -40,6 +40,7 @@ function mapSession(row: SessionRow): ChatSessionSummary {
     title: row.title || '新对话',
     persona_id: row.persona_id ?? null,
     persona_name: row.personas?.name ?? null,
+    persona_name_en: row.personas?.name_en ?? null,
     persona_avatar: row.personas?.avatar ?? null,
     session_type: row.session_type || 'text',
     last_message_preview: row.last_message_preview ?? '',
@@ -81,7 +82,7 @@ export async function createChatSession(
 
 export async function listChatSessions(supabaseUrl: string, key: string): Promise<ChatSessionSummary[]> {
   const query = [
-    'select=id,title,persona_id,session_type,last_message_preview,last_message_at,message_count,is_pinned,created_at,updated_at,personas(name,avatar)',
+    'select=id,title,persona_id,session_type,last_message_preview,last_message_at,message_count,is_pinned,created_at,updated_at,personas(name,name_en,avatar)',
     'order=is_pinned.desc,last_message_at.desc,created_at.desc',
     'limit=100',
   ].join('&')
@@ -91,13 +92,9 @@ export async function listChatSessions(supabaseUrl: string, key: string): Promis
   return rows.map(mapSession)
 }
 
-export async function getChatSession(
-  supabaseUrl: string,
-  key: string,
-  sessionId: string,
-): Promise<ChatSessionDetail | null> {
+export async function getChatSession(supabaseUrl: string, key: string, sessionId: string): Promise<ChatSessionDetail | null> {
   const sessionRes = await fetch(
-    `${supabaseUrl}/rest/v1/chat_sessions?select=id,title,persona_id,session_type,last_message_preview,last_message_at,message_count,is_pinned,created_at,updated_at,personas(name,avatar)&id=eq.${sessionId}&limit=1`,
+    `${supabaseUrl}/rest/v1/chat_sessions?select=id,title,persona_id,session_type,last_message_preview,last_message_at,message_count,is_pinned,created_at,updated_at,personas(name,name_en,avatar)&id=eq.${sessionId}&limit=1`,
     { headers: sbHeaders(key) },
   )
   if (!sessionRes.ok) throw new Error(`get chat session failed: ${await sessionRes.text()}`)
@@ -188,13 +185,9 @@ export async function syncChatSessionFromMessages(
   if (!patchRes.ok) throw new Error(`sync chat session failed: ${await patchRes.text()}`)
 }
 
-async function getChatSessionSummary(
-  supabaseUrl: string,
-  key: string,
-  sessionId: string,
-): Promise<ChatSessionSummary | null> {
+async function getChatSessionSummary(supabaseUrl: string, key: string, sessionId: string): Promise<ChatSessionSummary | null> {
   const res = await fetch(
-    `${supabaseUrl}/rest/v1/chat_sessions?select=id,title,persona_id,session_type,last_message_preview,last_message_at,message_count,is_pinned,created_at,updated_at,personas(name,avatar)&id=eq.${sessionId}&limit=1`,
+    `${supabaseUrl}/rest/v1/chat_sessions?select=id,title,persona_id,session_type,last_message_preview,last_message_at,message_count,is_pinned,created_at,updated_at,personas(name,name_en,avatar)&id=eq.${sessionId}&limit=1`,
     { headers: sbHeaders(key) },
   )
   if (!res.ok) throw new Error(`get chat session summary failed: ${await res.text()}`)

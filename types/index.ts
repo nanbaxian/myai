@@ -68,6 +68,7 @@ export interface ChatSessionSummary {
   title: string
   persona_id?: string | null
   persona_name?: string | null
+  persona_name_en?: string | null
   persona_avatar?: string | null
   session_type: 'text' | 'voice'
   last_message_preview: string

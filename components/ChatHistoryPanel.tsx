@@ -3,10 +3,11 @@
 import { useEffect, useMemo, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { Search, X, MessageSquare, Phone, Trash2, Pin, MoreHorizontal, Pencil } from 'lucide-react'
-import type { ChatSessionSummary } from '@/types'
+import type { ChatSessionSummary, Persona } from '@/types'
 import { apiUrl } from '@/lib/api-url'
 import { useI18n } from '@/lib/i18n/context'
 import { formatRelativeTime } from '@/lib/i18n/format'
+import { localizePersona } from '@/lib/persona-localization'
 
 interface Props {
   isOpen: boolean
@@ -51,7 +52,7 @@ export default function ChatHistoryPanel({
       }
     }
 
-    load()
+    void load()
     return () => {
       cancelled = true
     }
@@ -64,9 +65,9 @@ export default function ChatHistoryPanel({
       s =>
         s.title.toLowerCase().includes(keyword) ||
         s.last_message_preview.toLowerCase().includes(keyword) ||
-        (s.persona_name || '').toLowerCase().includes(keyword),
+        resolvePersonaName(s, locale).toLowerCase().includes(keyword),
     )
-  }, [search, sessions])
+  }, [locale, search, sessions])
 
   const pinned = filtered.filter(s => s.is_pinned)
   const recent = filtered.filter(s => !s.is_pinned)
@@ -228,9 +229,7 @@ export default function ChatHistoryPanel({
                   </div>
                 )}
 
-                {filtered.length === 0 && (
-                  <div className="text-center py-12 text-muted-foreground text-sm">{t('history.empty')}</div>
-                )}
+                {filtered.length === 0 && <div className="text-center py-12 text-muted-foreground text-sm">{t('history.empty')}</div>}
               </>
             )}
           </div>
@@ -272,6 +271,7 @@ function SessionItem({
   onDelete: () => void
 }) {
   const { t } = useI18n()
+  const personaName = resolvePersonaName(session, locale)
 
   return (
     <div className="relative group">
@@ -307,6 +307,7 @@ function SessionItem({
             )}
             {session.session_type === 'voice' && <Phone className="w-3 h-3 text-primary flex-shrink-0" />}
           </div>
+          {personaName && <p className="text-[11px] text-muted-foreground truncate mb-1">{personaName}</p>}
           <p className="text-xs text-muted-foreground truncate">{session.last_message_preview || t('history.emptyPreview')}</p>
           <div className="flex items-center gap-2 mt-1.5">
             <span className="text-[10px] text-muted-foreground">{formatRelativeTime(session.last_message_at, locale)}</span>
@@ -366,4 +367,17 @@ function SessionItem({
       </AnimatePresence>
     </div>
   )
+}
+
+function resolvePersonaName(session: ChatSessionSummary, locale: 'zh' | 'en'): string {
+  const persona: Persona = {
+    id: session.persona_id || 'history-persona',
+    name: session.persona_name || '',
+    name_en: session.persona_name_en || undefined,
+    avatar: session.persona_avatar || '',
+    prompt: '',
+    reply_style: 'medium',
+  }
+
+  return localizePersona(persona, locale)?.name || session.persona_name_en || session.persona_name || ''
 }

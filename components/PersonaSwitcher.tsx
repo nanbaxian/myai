@@ -46,8 +46,10 @@ export default function PersonaSwitcher({ currentPersona, onSwitch, onClose }: P
   const [switching, setSwitching] = useState<string | null>(null)
   const [showNew, setShowNew] = useState(false)
   const [newName, setNewName] = useState('')
+  const [newNameEn, setNewNameEn] = useState('')
   const [newAvatar, setNewAvatar] = useState('⭐')
   const [newPrompt, setNewPrompt] = useState('')
+  const [newPromptEn, setNewPromptEn] = useState('')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
 
@@ -123,10 +125,10 @@ export default function PersonaSwitcher({ currentPersona, onSwitch, onClose }: P
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           name: newName,
-          name_en: locale === 'en' ? newName : null,
+          name_en: newNameEn.trim() || null,
           avatar: newAvatar,
           prompt: newPrompt,
-          prompt_en: locale === 'en' ? newPrompt : null,
+          prompt_en: newPromptEn.trim() || null,
           reply_style: 'medium',
         }),
       })
@@ -136,8 +138,10 @@ export default function PersonaSwitcher({ currentPersona, onSwitch, onClose }: P
       setPersonas(prev => [...prev, created])
       setShowNew(false)
       setNewName('')
+      setNewNameEn('')
       setNewAvatar('⭐')
       setNewPrompt('')
+      setNewPromptEn('')
       await switchTo(created)
     } catch {
       setError(t('personaSwitcher.createFailed'))
@@ -275,6 +279,13 @@ export default function PersonaSwitcher({ currentPersona, onSwitch, onClose }: P
                 className="field-input text-sm"
                 maxLength={10}
               />
+              <input
+                value={newNameEn}
+                onChange={e => setNewNameEn(e.target.value)}
+                placeholder={t('personaModal.nameEnglishPlaceholder')}
+                className="field-input text-sm"
+                maxLength={40}
+              />
               <textarea
                 value={newPrompt}
                 onChange={e => setNewPrompt(e.target.value)}
@@ -283,7 +294,17 @@ export default function PersonaSwitcher({ currentPersona, onSwitch, onClose }: P
                 className="field-input text-sm resize-none leading-relaxed"
                 maxLength={1000}
               />
-              <div className="text-right text-[11px] text-ink-mute">{newPrompt.length}/1000</div>
+              <textarea
+                value={newPromptEn}
+                onChange={e => setNewPromptEn(e.target.value)}
+                placeholder={t('personaModal.promptEnglish')}
+                rows={4}
+                className="field-input text-sm resize-none leading-relaxed"
+                maxLength={1000}
+              />
+              <div className="text-right text-[11px] text-ink-mute">
+                zh {newPrompt.length}/1000 · en {newPromptEn.length}/1000
+              </div>
 
               <div className="flex gap-2 justify-end">
                 <button onClick={() => setShowNew(false)} className="px-4 py-2 rounded-lg border border-paper-deep text-sm text-ink-mute hover:bg-paper-warm">
