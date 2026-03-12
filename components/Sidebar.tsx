@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { Persona } from '@/types'
 import { supabase } from '@/lib/supabase-browser'
+import AuthWidget from '@/components/AuthWidget'
 import { AnimatePresence, motion } from 'framer-motion'
 import type { ComponentType } from 'react'
 import {
@@ -145,7 +146,7 @@ export default function Sidebar({
                   </button>
                 </div>
               ) : (
-                <div className="text-xs text-muted-foreground">未登录</div>
+                <AuthWidget />
               )}
             </div>
           </motion.aside>
