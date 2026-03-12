@@ -8,7 +8,7 @@ import MemoryManager from '@/components/MemoryManager'
 import PersonaSwitcher from '@/components/PersonaSwitcher'
 import ChatHistoryPanel from '@/components/ChatHistoryPanel'
 import VoiceCallOverlay from '@/components/VoiceCallOverlay'
-import { Persona, Message, ReplyLanguage } from '@/types'
+import type { ChatSessionDetail, ChatSessionSummary, Message, Persona, ReplyLanguage } from '@/types'
 import { apiUrl } from '@/lib/api-url'
 
 type Modal = 'persona' | 'memory' | 'switcher' | null
@@ -21,16 +21,25 @@ const DEFAULT_PERSONA: Persona = {
   prompt: 'You are Xiaoyu, a warm and empathetic companion.',
 }
 
+function deriveSessionTitle(text: string): string {
+  const compact = text.replace(/\s+/g, ' ').trim()
+  if (!compact) return '新对话'
+  return compact.length > 24 ? `${compact.slice(0, 24)}...` : compact
+}
+
 export default function Home() {
   const [persona, setPersona] = useState<Persona | null>(null)
   const [messages, setMessages] = useState<Message[]>([])
   const [modal, setModal] = useState<Modal>(null)
   const [loading, setLoading] = useState(true)
   const [sidebarRefreshKey, setSidebarRefreshKey] = useState(0)
+  const [historyRefreshKey, setHistoryRefreshKey] = useState(0)
   const [replyLanguage, setReplyLanguage] = useState<ReplyLanguage>('zh')
   const [sidebarOpen, setSidebarOpen] = useState(true)
   const [historyOpen, setHistoryOpen] = useState(false)
   const [voiceCallOpen, setVoiceCallOpen] = useState(false)
+  const [currentSessionId, setCurrentSessionId] = useState<string | null>(null)
+  const [currentSessionType, setCurrentSessionType] = useState<'text' | 'voice' | null>(null)
 
   useEffect(() => {
     fetch(apiUrl('/api/personas/active'))
@@ -38,7 +47,7 @@ export default function Home() {
         if (!r.ok) throw new Error('load failed')
         return r.json() as Promise<Persona>
       })
-      .then((data: Persona) => {
+      .then(data => {
         setPersona(data?.id ? data : DEFAULT_PERSONA)
         setLoading(false)
       })
@@ -50,10 +59,79 @@ export default function Home() {
 
   const activePersona = persona ?? DEFAULT_PERSONA
 
+  function resetConversation() {
+    setMessages([])
+    setCurrentSessionId(null)
+    setCurrentSessionType(null)
+  }
+
   const handlePersonaSwitch = (newPersona: Persona) => {
     setPersona(newPersona)
-    setMessages([])
+    resetConversation()
     setModal(null)
+    setHistoryRefreshKey(k => k + 1)
+  }
+
+  async function createSession(seedText: string, sessionType: 'text' | 'voice' = 'text'): Promise<string | null> {
+    try {
+      const res = await fetch(apiUrl('/api/history'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title: deriveSessionTitle(seedText),
+          persona_id: activePersona.id,
+          session_type: sessionType,
+        }),
+      })
+      if (!res.ok) throw new Error('create session failed')
+      const session = (await res.json()) as ChatSessionSummary
+      if (!session?.id) throw new Error('invalid session')
+      setCurrentSessionId(session.id)
+      setCurrentSessionType(sessionType)
+      setHistoryRefreshKey(k => k + 1)
+      return session.id
+    } catch {
+      return null
+    }
+  }
+
+  async function ensureSession(seedText: string, sessionType: 'text' | 'voice' = 'text'): Promise<string | null> {
+    if (currentSessionId && currentSessionType === sessionType) return currentSessionId
+    return createSession(seedText, sessionType)
+  }
+
+  async function maybeSwitchPersonaForSession(detail: ChatSessionDetail) {
+    if (!detail.persona_id || detail.persona_id === activePersona.id) return
+    try {
+      const listRes = await fetch(apiUrl('/api/personas'))
+      if (!listRes.ok) return
+      const personas = (await listRes.json()) as Persona[]
+      const matched = personas.find(item => item.id === detail.persona_id)
+      if (!matched) return
+      setPersona(matched)
+      await fetch(apiUrl('/api/personas/active'), {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ persona_id: matched.id }),
+      })
+    } catch {
+      // ignore persona switch failures when loading history
+    }
+  }
+
+  async function loadSession(sessionId: string) {
+    try {
+      const res = await fetch(apiUrl(`/api/history/${sessionId}`))
+      if (!res.ok) throw new Error('load session failed')
+      const detail = (await res.json()) as ChatSessionDetail
+      await maybeSwitchPersonaForSession(detail)
+      setCurrentSessionId(detail.id)
+      setCurrentSessionType(detail.session_type)
+      setMessages(detail.messages || [])
+      setHistoryOpen(false)
+    } catch {
+      // ignore load failures to avoid nuking current conversation
+    }
   }
 
   const handleSendMessage = async (
@@ -61,25 +139,31 @@ export default function Home() {
     imageUrl?: string,
     imagePreviewUrl?: string,
     lang: ReplyLanguage = replyLanguage,
+    sessionType: 'text' | 'voice' = 'text',
   ): Promise<string | null> => {
     if (!text && !imageUrl) return null
 
+    const sessionId = await ensureSession(text || '图片对话', sessionType)
+
     const userMsg: Message = {
-      id: 'user-' + Date.now(),
+      id: `user-${Date.now()}`,
       role: 'user',
       content: text,
       content_type: imageUrl ? 'image' : 'text',
+      image_url: imageUrl,
       image_preview: imagePreviewUrl,
+      session_id: sessionId ?? undefined,
       created_at: new Date().toISOString(),
     }
 
-    const typingId = 'typing-' + Date.now()
+    const typingId = `typing-${Date.now()}`
     const typingMsg: Message = {
       id: typingId,
       role: 'assistant',
       content: '',
       content_type: 'text',
       is_typing: true,
+      session_id: sessionId ?? undefined,
       created_at: new Date().toISOString(),
     }
 
@@ -89,7 +173,7 @@ export default function Home() {
       const res = await fetch(apiUrl('/api/chat'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: text, imageUrl, replyLanguage: lang }),
+        body: JSON.stringify({ message: text, imageUrl, replyLanguage: lang, session_id: sessionId }),
       })
 
       if (!res.ok) throw new Error('API error')
@@ -120,7 +204,9 @@ export default function Home() {
               aiContent += data.text
               if (!started) {
                 started = true
-                setMessages(prev => prev.map(m => (m.id === typingId ? { ...m, is_typing: false, content: aiContent } : m)))
+                setMessages(prev =>
+                  prev.map(m => (m.id === typingId ? { ...m, is_typing: false, content: aiContent } : m)),
+                )
               } else {
                 setMessages(prev => prev.map(m => (m.id === typingId ? { ...m, content: aiContent } : m)))
               }
@@ -132,11 +218,19 @@ export default function Home() {
               setMessages(prev =>
                 prev.map(m =>
                   m.id === typingId
-                    ? { ...m, id: 'ai-' + Date.now(), is_typing: false, content: finalText }
+                    ? {
+                        ...m,
+                        id: `ai-${Date.now()}`,
+                        is_typing: false,
+                        content: finalText,
+                        session_id: sessionId ?? undefined,
+                      }
                     : m,
                 ),
               )
+              setCurrentSessionType(sessionType)
               setSidebarRefreshKey(k => k + 1)
+              setHistoryRefreshKey(k => k + 1)
               return finalText
             }
           } catch {
@@ -152,22 +246,24 @@ export default function Home() {
               ? {
                   ...m,
                   is_typing: false,
-                  id: 'err-' + Date.now(),
+                  id: `err-${Date.now()}`,
                   content: streamError ? `Request failed: ${streamError}` : 'No reply received, please retry.',
                 }
               : m,
           ),
         )
       }
+      setHistoryRefreshKey(k => k + 1)
       return null
     } catch {
       setMessages(prev =>
         prev.map(m =>
           m.id === typingId
-            ? { ...m, is_typing: false, id: 'err-' + Date.now(), content: 'Something went wrong, please retry.' }
+            ? { ...m, is_typing: false, id: `err-${Date.now()}`, content: 'Something went wrong, please retry.' }
             : m,
         ),
       )
+      setHistoryRefreshKey(k => k + 1)
       return null
     }
   }
@@ -191,10 +287,21 @@ export default function Home() {
         onSwitchPersona={() => setModal('switcher')}
         onOpenHistory={() => setHistoryOpen(true)}
         onStartVoiceCall={() => setVoiceCallOpen(true)}
+        onNewChat={resetConversation}
         refreshKey={sidebarRefreshKey}
       />
 
-      <ChatHistoryPanel isOpen={historyOpen} onClose={() => setHistoryOpen(false)} />
+      <ChatHistoryPanel
+        isOpen={historyOpen}
+        currentSessionId={currentSessionId}
+        refreshKey={historyRefreshKey}
+        onClose={() => setHistoryOpen(false)}
+        onSelectSession={loadSession}
+        onDeletedSession={sessionId => {
+          if (sessionId === currentSessionId) resetConversation()
+          setHistoryRefreshKey(k => k + 1)
+        }}
+      />
 
       <ChatWindow
         persona={activePersona}
@@ -229,7 +336,7 @@ export default function Home() {
           isOpen={voiceCallOpen}
           onClose={() => setVoiceCallOpen(false)}
           replyLanguage={replyLanguage}
-          onVoiceTurn={(text, lang) => handleSendMessage(text, undefined, undefined, lang)}
+          onVoiceTurn={(text, lang, sessionType) => handleSendMessage(text, undefined, undefined, lang, sessionType ?? 'voice')}
         />
       )}
     </div>

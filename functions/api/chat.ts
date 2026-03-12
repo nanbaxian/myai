@@ -4,6 +4,7 @@
 import { loadMemoryContext, saveMessage } from '../../lib/memory-engine'
 import { buildSystemPrompt, buildMessageHistory } from '../../lib/context-builder'
 import { streamGemini, streamGeminiFlashLite } from '../../lib/gemini-client'
+import { syncChatSessionFromMessages } from '../../lib/chat-history'
 import type { Persona, ReplyLanguage } from '../../types/index'
 import { createApiLogger } from '../../lib/api-log'
 
@@ -68,14 +69,14 @@ export const onRequestPost: PagesFunction<Env> = async (ctx) => {
   const debug = true
   apiLog.start({ debug })
   console.log(`[chat ${reqId}] request_start debug=${debug}`)
-  let body: { message?: string; imageBase64?: string; imageUrl?: string; replyLanguage?: ReplyLanguage }
+  let body: { message?: string; imageBase64?: string; imageUrl?: string; replyLanguage?: ReplyLanguage; session_id?: string }
   try { body = await request.json() }
   catch (e) {
     apiLog.fail(e, { stage: 'parse' })
     return errJson('请求格式错误', 400)
   }
 
-  const { message = '', imageUrl } = body
+  const { message = '', imageUrl, session_id } = body
   let { imageBase64 } = body
   const replyLanguage: ReplyLanguage =
     body.replyLanguage === 'en' || body.replyLanguage === 'zh'
@@ -132,8 +133,25 @@ export const onRequestPost: PagesFunction<Env> = async (ctx) => {
   // ④ 异步保存用户消息（不阻塞流式）
   const saveUserMsg = saveMessage(sbUrl, sbKey, 'user',
     message || '（发送了图片）',
-    { content_type: imageBase64 ? 'image' : 'text', persona_id: persona.id }
+    {
+      content_type: imageBase64 ? 'image' : 'text',
+      image_url: imageUrl,
+      persona_id: persona.id,
+      session_id,
+    }
   ).catch(e => console.error('[save user msg]', e))
+
+  if (session_id) {
+    saveUserMsg
+      .then(() =>
+        syncChatSessionFromMessages(sbUrl, sbKey, session_id, {
+          persona_id: persona.id,
+          session_type: 'text',
+          fallbackTitle: message,
+        }),
+      )
+      .catch(e => console.error('[sync session after user msg]', e))
+  }
 
   // ⑤ 调用 Gemini 流式
   const maxOutputTokens = Number.parseInt(env.DEEPINFRA_MAX_TOKENS || '', 10)
@@ -200,7 +218,18 @@ export const onRequestPost: PagesFunction<Env> = async (ctx) => {
               if (debug) console.log(`[chat ${reqId}] done full_len=${fullText.length}`)
               apiLog.ok({ personaId: persona.id, fullLen: fullText.length })
               saveUserMsg.then(() =>
-                saveMessage(sbUrl, sbKey, 'assistant', fullText || '...', { persona_id: persona.id })
+                saveMessage(sbUrl, sbKey, 'assistant', fullText || '...', {
+                  persona_id: persona.id,
+                  session_id,
+                })
+                  .then(() => {
+                    if (!session_id) return
+                    return syncChatSessionFromMessages(sbUrl, sbKey, session_id, {
+                      persona_id: persona.id,
+                      session_type: 'text',
+                      fallbackTitle: message,
+                    })
+                  })
                   .catch(e => console.error('[save ai msg]', e))
               )
             }
@@ -218,7 +247,18 @@ export const onRequestPost: PagesFunction<Env> = async (ctx) => {
             if (debug) console.log(`[chat ${reqId}] done@flush full_len=${fullText.length}`)
             apiLog.ok({ personaId: persona.id, fullLen: fullText.length, source: 'flush' })
             saveUserMsg.then(() =>
-              saveMessage(sbUrl, sbKey, 'assistant', fullText || '...', { persona_id: persona.id })
+              saveMessage(sbUrl, sbKey, 'assistant', fullText || '...', {
+                persona_id: persona.id,
+                session_id,
+              })
+                .then(() => {
+                  if (!session_id) return
+                  return syncChatSessionFromMessages(sbUrl, sbKey, session_id, {
+                    persona_id: persona.id,
+                    session_type: 'text',
+                    fallbackTitle: message,
+                  })
+                })
                 .catch(e => console.error('[save ai msg flush]', e))
             )
           }

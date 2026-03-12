@@ -12,7 +12,7 @@ interface Props {
   isOpen: boolean
   onClose: () => void
   replyLanguage: ReplyLanguage
-  onVoiceTurn: (text: string, lang: ReplyLanguage) => Promise<string | null>
+  onVoiceTurn: (text: string, lang: ReplyLanguage, sessionType?: 'text' | 'voice') => Promise<string | null>
 }
 
 async function uploadFileToR2(file: File, token: string): Promise<{ url: string }> {
@@ -310,7 +310,7 @@ export default function VoiceCallOverlay({ persona, isOpen, onClose, replyLangua
       if (!transcribed) return
 
       setLastHeardText(transcribed)
-      const aiText = await onVoiceTurn(transcribed, replyLanguageRef.current)
+      const aiText = await onVoiceTurn(transcribed, replyLanguageRef.current, 'voice')
       if (!aiText?.trim()) return
       if (isSpeakerOffRef.current || !callActiveRef.current) return
 

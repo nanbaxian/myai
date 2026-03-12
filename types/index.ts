@@ -1,42 +1,32 @@
-// types/index.ts
-// 全局唯一类型定义 —— 所有组件和 lib 统一从这里导入
-
-// ================================================
-// 人设
-// ================================================
 export interface Persona {
   id: string
   name: string
-  avatar: string              // emoji
-  prompt: string              // 人设描述，最多1000字
+  avatar: string
+  prompt: string
   reply_style: 'short' | 'medium' | 'long'
   voice_id?: string
 }
 
 export type ReplyLanguage = 'zh' | 'en'
 
-// ================================================
-// 消息（前端显示用，含 UI 专有字段）
-// ================================================
 export interface Message {
   id: string
   role: 'user' | 'assistant'
   content: string
   content_type: 'text' | 'image' | 'voice'
-  image_preview?: string      // 本地预览 blob:// / data://（仅前端）
-  image_url?: string          // 服务端存储 URL
-  is_typing?: boolean         // 流式占位消息标记
+  session_id?: string
+  image_preview?: string
+  image_url?: string
+  is_typing?: boolean
   created_at: string
 }
 
-// ================================================
-// 记忆（lib 层，供 memory-engine / context-builder 共用）
-// ================================================
 export interface DbMessage {
   id: string
   role: 'user' | 'assistant'
   content: string
   content_type: 'text' | 'image' | 'voice'
+  session_id?: string
   image_url?: string
   memory_tier?: 'short' | 'mid' | 'long'
   persona_id?: string
@@ -60,7 +50,7 @@ export interface MemorySnapshot {
   clarity_score: number
   period_start: string
   period_end: string
-  similarity?: number         // P2 向量搜索返回
+  similarity?: number
 }
 
 export interface MemoryContext {
@@ -69,4 +59,23 @@ export interface MemoryContext {
   longTermFragments: MemorySnapshot[]
   shortTermMessages: DbMessage[]
   semanticMatches?: MemorySnapshot[]
+}
+
+export interface ChatSessionSummary {
+  id: string
+  title: string
+  persona_id?: string | null
+  persona_name?: string | null
+  persona_avatar?: string | null
+  session_type: 'text' | 'voice'
+  last_message_preview: string
+  last_message_at: string
+  message_count: number
+  is_pinned: boolean
+  created_at: string
+  updated_at?: string
+}
+
+export interface ChatSessionDetail extends ChatSessionSummary {
+  messages: Message[]
 }

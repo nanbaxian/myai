@@ -1,11 +1,8 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { Persona } from '@/types'
-import { supabase } from '@/lib/supabase-browser'
-import AuthWidget from '@/components/AuthWidget'
-import { AnimatePresence, motion } from 'framer-motion'
 import type { ComponentType } from 'react'
+import { AnimatePresence, motion } from 'framer-motion'
 import {
   Sparkles,
   Settings,
@@ -18,6 +15,9 @@ import {
   Phone,
   History,
 } from 'lucide-react'
+import type { Persona } from '@/types'
+import { supabase } from '@/lib/supabase-browser'
+import AuthWidget from '@/components/AuthWidget'
 
 interface Props {
   persona: Persona | null
@@ -28,6 +28,7 @@ interface Props {
   onSwitchPersona: () => void
   onOpenHistory: () => void
   onStartVoiceCall: () => void
+  onNewChat: () => void
   refreshKey?: number
 }
 
@@ -40,6 +41,7 @@ export default function Sidebar({
   onSwitchPersona,
   onOpenHistory,
   onStartVoiceCall,
+  onNewChat,
 }: Props) {
   const [userEmail, setUserEmail] = useState<string | null>(null)
 
@@ -103,7 +105,7 @@ export default function Sidebar({
               <div className="mx-4 mb-4 p-4 rounded-xl bg-sidebar-accent border border-sidebar-border">
                 <div className="flex items-center gap-3 mb-3">
                   <div className="w-10 h-10 rounded-full bg-primary/15 flex items-center justify-center text-xl border border-primary/20">
-                    {persona.avatar || '🌸'}
+                    {persona.avatar || '*'}
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="font-serif text-sm text-foreground truncate">{persona.name}</div>
@@ -125,7 +127,7 @@ export default function Sidebar({
               <SidebarButton icon={Users} label="切换人设" onClick={onSwitchPersona} />
               <SidebarButton icon={History} label="聊天记录" onClick={onOpenHistory} />
               <SidebarButton icon={Phone} label="语音通话" onClick={onStartVoiceCall} />
-              <SidebarButton icon={Plus} label="新对话" onClick={() => window.location.reload()} />
+              <SidebarButton icon={Plus} label="新对话" onClick={onNewChat} />
             </div>
 
             <div className="p-4 border-t border-sidebar-border">

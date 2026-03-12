@@ -226,7 +226,7 @@ export async function saveMessage(
   supabaseKey: string,
   role: 'user' | 'assistant',
   content: string,
-  opts: { content_type?: string; image_url?: string; persona_id?: string } = {}
+  opts: { content_type?: string; image_url?: string; persona_id?: string; session_id?: string } = {}
 ): Promise<void> {
   const db = new SupabaseRest(supabaseUrl, supabaseKey)
   await db.insert('messages', {
@@ -236,6 +236,7 @@ export async function saveMessage(
     image_url:    opts.image_url ?? null,
     memory_tier:  'short',
     ...(opts.persona_id ? { persona_id: opts.persona_id } : {}),
+    ...(opts.session_id ? { session_id: opts.session_id } : {}),
   })
 }
 
