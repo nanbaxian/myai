@@ -1,9 +1,11 @@
 import type { Metadata, Viewport } from 'next'
+import { getSiteUrl } from '@/lib/i18n/config'
 import './globals.css'
 
 export const metadata: Metadata = {
-  title: '心语 · AI伴侣',
-  description: '专属你的 AI 伴侣，有记忆，懂人设。',
+  metadataBase: new URL(getSiteUrl()),
+  title: 'Xinyu · AI Companion',
+  description: 'Your AI companion with memory, persona controls, and bilingual Chinese-English UI.',
 }
 
 export const viewport: Viewport = {
@@ -17,7 +19,7 @@ export default function RootLayout({
   children: React.ReactNode
 }) {
   return (
-    <html lang="zh-CN">
+    <html lang="en" suppressHydrationWarning>
       <head>
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />

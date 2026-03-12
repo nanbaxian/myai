@@ -2,12 +2,14 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '@/lib/supabase-browser'
+import { useI18n } from '@/lib/i18n/context'
 
 type Props = {
   className?: string
 }
 
 export default function AuthWidget({ className }: Props) {
+  const { t } = useI18n()
   const [email, setEmail] = useState('')
   const [status, setStatus] = useState<'idle' | 'sending' | 'sent' | 'error'>('idle')
   const [sessionEmail, setSessionEmail] = useState<string | null>(null)
@@ -61,7 +63,7 @@ export default function AuthWidget({ className }: Props) {
     return (
       <div className={className}>
         <div className="text-[11px] leading-relaxed text-muted-foreground">
-          未配置登录环境变量
+          {t('auth.missingConfig')}
           <br />
           <span className="text-[10px]">NEXT_PUBLIC_SUPABASE_URL / NEXT_PUBLIC_SUPABASE_ANON_KEY</span>
         </div>
@@ -74,19 +76,19 @@ export default function AuthWidget({ className }: Props) {
       {sessionEmail ? (
         <div className="flex items-center justify-between gap-2">
           <div className="min-w-0">
-            <div className="text-[11px] text-muted-foreground">已登录</div>
+            <div className="text-[11px] text-muted-foreground">{t('auth.loggedIn')}</div>
             <div className="truncate text-[12px] text-foreground">{sessionEmail}</div>
           </div>
           <button
             onClick={logout}
             className="rounded-lg border border-border bg-secondary/40 px-2.5 py-1.5 text-[11px] text-muted-foreground transition-all hover:bg-secondary hover:text-foreground"
           >
-            退出
+            {t('sidebar.logout')}
           </button>
         </div>
       ) : (
         <div>
-          <div className="mb-2 text-[11px] text-muted-foreground">登录后可使用语音（免费每日 10 分钟）</div>
+          <div className="mb-2 text-[11px] text-muted-foreground">{t('auth.voiceHint')}</div>
           <div className="flex gap-2">
             <input
               value={email}
@@ -99,11 +101,11 @@ export default function AuthWidget({ className }: Props) {
               disabled={!email.trim() || status === 'sending'}
               className="rounded-lg bg-primary px-3 py-2 text-[12px] font-medium text-primary-foreground disabled:opacity-40"
             >
-              {status === 'sending' ? '发送中' : 'Magic Link'}
+              {status === 'sending' ? t('auth.sending') : t('auth.magicLink')}
             </button>
           </div>
-          {status === 'sent' && <div className="mt-2 text-[11px] text-green-400">已发送，请查收邮箱</div>}
-          {status === 'error' && <div className="mt-2 text-[11px] text-red-400">发送失败，请重试</div>}
+          {status === 'sent' && <div className="mt-2 text-[11px] text-green-400">{t('auth.sent')}</div>}
+          {status === 'error' && <div className="mt-2 text-[11px] text-red-400">{t('auth.sendFailed')}</div>}
         </div>
       )}
     </div>

@@ -5,6 +5,7 @@ import { ImageIcon, Phone, SendHorizontal, X } from 'lucide-react'
 import { Persona, ReplyLanguage } from '@/types'
 import { supabase } from '@/lib/supabase-browser'
 import { apiUrl } from '@/lib/api-url'
+import { useI18n } from '@/lib/i18n/context'
 
 interface Props {
   onSend: (text: string, imageUrl?: string, imagePreviewUrl?: string, replyLanguage?: ReplyLanguage) => Promise<string | null> | void
@@ -33,6 +34,7 @@ export default function InputArea({
   onStartVoiceCall,
   voiceCallOpen,
 }: Props) {
+  const { t } = useI18n()
   const [text, setText] = useState('')
   const [pendingImage, setPendingImage] = useState<{ preview: string } | null>(null)
   const [pendingImageFile, setPendingImageFile] = useState<File | null>(null)
@@ -67,7 +69,7 @@ export default function InputArea({
           const sess = await supabase.auth.getSession()
           const token = sess.data.session?.access_token
           if (!token) {
-            setUiError('Please login before sending images.')
+            setUiError(t('input.loginBeforeImage'))
             setTimeout(() => setUiError(''), 3000)
             return
           }
@@ -82,7 +84,7 @@ export default function InputArea({
         setPendingImageFile(null)
         if (textareaRef.current) textareaRef.current.style.height = 'auto'
       } catch {
-        setUiError('Send failed, please retry.')
+        setUiError(t('input.sendFailed'))
         setTimeout(() => setUiError(''), 3000)
       }
     })()
@@ -95,11 +97,13 @@ export default function InputArea({
     }
   }
 
+  const placeholder = persona?.name ? t('chat.sayToPersona', { name: persona.name }) : t('chat.sayToHer')
+
   return (
     <div className="px-5 py-3 border-t border-border bg-card/70 backdrop-blur-sm flex-shrink-0">
       {pendingImage && (
         <div className="mb-3 relative inline-block">
-          <img src={pendingImage.preview} alt="preview" className="h-16 w-auto rounded-lg border border-border object-cover" />
+          <img src={pendingImage.preview} alt={t('chat.imagePreviewAlt')} className="h-16 w-auto rounded-lg border border-border object-cover" />
           <button
             onClick={() => {
               setPendingImage(null)
@@ -113,7 +117,7 @@ export default function InputArea({
       )}
 
       <div className="flex items-center gap-3">
-        <button onClick={() => fileInputRef.current?.click()} className="tool-btn" title="Upload image" disabled={disabled}>
+        <button onClick={() => fileInputRef.current?.click()} className="tool-btn" title={t('chat.uploadImage')} disabled={disabled}>
           <ImageIcon className="w-4 h-4" />
         </button>
         <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleImageSelect} />
@@ -127,7 +131,7 @@ export default function InputArea({
               autoResize()
             }}
             onKeyDown={handleKeyDown}
-            placeholder={`Say something to ${persona?.name || 'her'}...`}
+            placeholder={placeholder}
             rows={1}
             disabled={disabled}
             className="w-full min-h-[54px] max-h-[120px] px-5 py-[14px] pr-28 rounded-2xl border border-border bg-input
@@ -138,7 +142,7 @@ export default function InputArea({
 
           <button
             onClick={onStartVoiceCall}
-            title="Voice chat"
+            title={t('chat.voiceChat')}
             disabled={disabled}
             className={`absolute right-[58px] top-1/2 -translate-y-1/2 w-11 h-11 rounded-2xl border flex items-center justify-center transition-all ${
               voiceCallOpen

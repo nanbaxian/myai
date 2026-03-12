@@ -6,6 +6,7 @@ import { AnimatePresence, motion } from 'framer-motion'
 import { Mic, MicOff, PhoneOff, Volume2, VolumeX } from 'lucide-react'
 import { supabase } from '@/lib/supabase-browser'
 import { apiUrl } from '@/lib/api-url'
+import { useI18n } from '@/lib/i18n/context'
 
 interface Props {
   persona: Persona
@@ -114,6 +115,7 @@ async function speakWithBrowserTts(text: string, lang: ReplyLanguage): Promise<b
 }
 
 export default function VoiceCallOverlay({ persona, isOpen, onClose, replyLanguage, onVoiceTurn }: Props) {
+  const { t } = useI18n()
   const [isMuted, setIsMuted] = useState(false)
   const [isSpeakerOff, setIsSpeakerOff] = useState(false)
   const [callDuration, setCallDuration] = useState(0)
@@ -269,7 +271,7 @@ export default function VoiceCallOverlay({ persona, isOpen, onClose, replyLangua
     try {
       const sess = await supabase.auth.getSession()
       const token = sess.data.session?.access_token
-      if (!token) throw new Error('Please login before voice call.')
+      if (!token) throw new Error(t('voice.loginRequired'))
 
       const ext = blob.type.includes('mp4') ? 'mp4' : 'webm'
       const audioFile = blobToFile(blob, `voice-turn.${ext}`)
@@ -287,7 +289,7 @@ export default function VoiceCallOverlay({ persona, isOpen, onClose, replyLangua
       if (!sttRes.ok) {
         // 422 means "no valid speech recognized"; treat as a silent turn.
         if (sttRes.status === 422) return
-        throw new Error('Speech recognition failed')
+        throw new Error(t('voice.speechRecognitionFailed'))
       }
 
       const { text } = (await sttRes.json()) as { text?: string }
@@ -302,14 +304,14 @@ export default function VoiceCallOverlay({ persona, isOpen, onClose, replyLangua
       setAiSpeaking(true)
       await speakText(aiText, token, replyLanguageRef.current)
     } catch (e) {
-      const msg = e instanceof Error ? e.message : 'Voice call failed'
+      const msg = e instanceof Error ? e.message : t('voice.voiceFailed')
       setCallError(msg)
     } finally {
       setAiSpeaking(false)
       setIsProcessing(false)
       processingRef.current = false
     }
-  }, [onVoiceTurn, speakText])
+  }, [onVoiceTurn, speakText, t])
 
   const scheduleNextTurn = useCallback((delayMs = 180) => {
     if (!callActiveRef.current) return
@@ -325,7 +327,7 @@ export default function VoiceCallOverlay({ persona, isOpen, onClose, replyLangua
         try {
           stream = await ensureAudioPipeline()
         } catch {
-          setCallError('Cannot access microphone')
+          setCallError(t('voice.cannotAccessMic'))
           scheduleNextTurn(600)
           return
         }
@@ -379,7 +381,7 @@ export default function VoiceCallOverlay({ persona, isOpen, onClose, replyLangua
         }
 
         recorder.onerror = () => {
-          setCallError('Recorder error')
+          setCallError(t('voice.recorderError'))
           scheduleNextTurn(400)
         }
 
@@ -422,7 +424,7 @@ export default function VoiceCallOverlay({ persona, isOpen, onClose, replyLangua
         }, VAD_SAMPLE_MS)
       })()
     }, delayMs)
-  }, [ensureAudioPipeline, processUserTurn])
+  }, [ensureAudioPipeline, processUserTurn, t])
 
   useEffect(() => {
     if (!isOpen) {
@@ -462,12 +464,12 @@ export default function VoiceCallOverlay({ persona, isOpen, onClose, replyLangua
   const statusText = callError
     ? callError
     : aiSpeaking
-      ? 'Speaking...'
+      ? t('voice.speaking')
       : isMuted
-        ? 'Muted'
+        ? t('voice.muted')
         : isProcessing
-          ? 'Processing...'
-          : 'Listening...'
+          ? t('voice.processing')
+          : t('voice.listening')
 
   return (
     <AnimatePresence>
@@ -519,7 +521,7 @@ export default function VoiceCallOverlay({ persona, isOpen, onClose, replyLangua
               <p className={`text-sm ${callError ? 'text-destructive' : 'text-muted-foreground'}`}>{statusText}</p>
               <p className="text-primary text-sm mt-2 font-mono">{formatTime(callDuration)}</p>
               {lastHeardText && !callError && (
-                <p className="mt-2 text-xs text-muted-foreground line-clamp-2">You said: {lastHeardText}</p>
+                <p className="mt-2 text-xs text-muted-foreground line-clamp-2">{t('voice.youSaid')} {lastHeardText}</p>
               )}
             </div>
 
@@ -531,7 +533,7 @@ export default function VoiceCallOverlay({ persona, isOpen, onClose, replyLangua
                     ? 'bg-destructive/20 text-destructive border border-destructive/30'
                     : 'bg-secondary text-foreground border border-border hover:bg-secondary/80'
                 }`}
-                title={isMuted ? 'Unmute' : 'Mute'}
+                title={isMuted ? t('voice.unmute') : t('voice.mute')}
               >
                 {isMuted ? <MicOff className="w-5 h-5" /> : <Mic className="w-5 h-5" />}
               </button>
@@ -539,7 +541,7 @@ export default function VoiceCallOverlay({ persona, isOpen, onClose, replyLangua
               <button
                 onClick={onClose}
                 className="w-16 h-16 rounded-full bg-destructive text-destructive-foreground flex items-center justify-center hover:brightness-110 transition-all shadow-[0_0_20px_hsl(0_70%_50%/0.3)]"
-                title="End call"
+                title={t('voice.endCall')}
               >
                 <PhoneOff className="w-6 h-6" />
               </button>
@@ -551,7 +553,7 @@ export default function VoiceCallOverlay({ persona, isOpen, onClose, replyLangua
                     ? 'bg-destructive/20 text-destructive border border-destructive/30'
                     : 'bg-secondary text-foreground border border-border hover:bg-secondary/80'
                 }`}
-                title={isSpeakerOff ? 'Speaker on' : 'Speaker off'}
+                title={isSpeakerOff ? t('voice.speakerOn') : t('voice.speakerOff')}
               >
                 {isSpeakerOff ? <VolumeX className="w-5 h-5" /> : <Volume2 className="w-5 h-5" />}
               </button>

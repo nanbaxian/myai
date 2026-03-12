@@ -14,15 +14,18 @@ import {
   ChevronRight,
   Phone,
   History,
+  UserRoundPen,
 } from 'lucide-react'
 import type { Persona } from '@/types'
 import { supabase } from '@/lib/supabase-browser'
 import AuthWidget from '@/components/AuthWidget'
+import { useI18n } from '@/lib/i18n/context'
 
 interface Props {
   persona: Persona | null
   isOpen: boolean
   onToggle: () => void
+  onOpenSettings: () => void
   onEditPersona: () => void
   onOpenMemory: () => void
   onSwitchPersona: () => void
@@ -36,6 +39,7 @@ export default function Sidebar({
   persona,
   isOpen,
   onToggle,
+  onOpenSettings,
   onEditPersona,
   onOpenMemory,
   onSwitchPersona,
@@ -43,6 +47,7 @@ export default function Sidebar({
   onStartVoiceCall,
   onNewChat,
 }: Props) {
+  const { t } = useI18n()
   const [userEmail, setUserEmail] = useState<string | null>(null)
 
   useEffect(() => {
@@ -94,7 +99,7 @@ export default function Sidebar({
                 <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center">
                   <Sparkles className="w-4 h-4 text-primary" />
                 </div>
-                <span className="font-serif text-lg text-foreground">心语</span>
+                <span className="font-serif text-lg text-foreground">{t('sidebar.brand')}</span>
               </div>
               <button onClick={onToggle} className="p-1.5 rounded-lg hover:bg-sidebar-accent transition-colors">
                 <ChevronLeft className="w-4 h-4 text-muted-foreground" />
@@ -111,7 +116,7 @@ export default function Sidebar({
                     <div className="font-serif text-sm text-foreground truncate">{persona.name}</div>
                     <div className="flex items-center gap-1.5 mt-0.5">
                       <div className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse-glow" />
-                      <span className="text-xs text-muted-foreground">在线</span>
+                      <span className="text-xs text-muted-foreground">{t('common.online')}</span>
                     </div>
                   </div>
                 </div>
@@ -122,12 +127,13 @@ export default function Sidebar({
             )}
 
             <div className="px-3 space-y-1 flex-1">
-              <SidebarButton icon={Settings} label="编辑人设" onClick={onEditPersona} />
-              <SidebarButton icon={Brain} label="记忆管理" onClick={onOpenMemory} />
-              <SidebarButton icon={Users} label="切换人设" onClick={onSwitchPersona} />
-              <SidebarButton icon={History} label="聊天记录" onClick={onOpenHistory} />
-              <SidebarButton icon={Phone} label="语音通话" onClick={onStartVoiceCall} />
-              <SidebarButton icon={Plus} label="新对话" onClick={onNewChat} />
+              <SidebarButton icon={Settings} label={t('sidebar.settings')} onClick={onOpenSettings} />
+              <SidebarButton icon={UserRoundPen} label={t('sidebar.editPersona')} onClick={onEditPersona} />
+              <SidebarButton icon={Brain} label={t('sidebar.memory')} onClick={onOpenMemory} />
+              <SidebarButton icon={Users} label={t('sidebar.switchPersona')} onClick={onSwitchPersona} />
+              <SidebarButton icon={History} label={t('sidebar.history')} onClick={onOpenHistory} />
+              <SidebarButton icon={Phone} label={t('sidebar.voiceCall')} onClick={onStartVoiceCall} />
+              <SidebarButton icon={Plus} label={t('sidebar.newChat')} onClick={onNewChat} />
             </div>
 
             <div className="p-4 border-t border-sidebar-border">
@@ -142,7 +148,7 @@ export default function Sidebar({
                   <button
                     onClick={onLogout}
                     className="p-1.5 rounded-lg hover:bg-sidebar-accent transition-colors"
-                    title="退出"
+                    title={t('sidebar.logout')}
                   >
                     <LogOut className="w-4 h-4 text-muted-foreground" />
                   </button>

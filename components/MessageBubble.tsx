@@ -1,8 +1,9 @@
 'use client'
 
-import { Message, Persona } from '@/types'
 import { motion } from 'framer-motion'
 import ReactMarkdown from 'react-markdown'
+import { Message, Persona } from '@/types'
+import { useI18n } from '@/lib/i18n/context'
 
 interface Props {
   message: Message
@@ -11,6 +12,7 @@ interface Props {
 }
 
 export default function MessageBubble({ message, persona, isFirst }: Props) {
+  const { t } = useI18n()
   const isAI = message.role === 'assistant'
   const isUser = message.role === 'user'
   const time = new Date(message.created_at)
@@ -33,13 +35,13 @@ export default function MessageBubble({ message, persona, isFirst }: Props) {
           ${!isFirst ? 'invisible' : ''}
         `}
       >
-        {isAI ? (persona?.avatar || '✨') : '👤'}
+        {isAI ? (persona?.avatar || '*') : '👤'}
       </div>
 
       <div className={`max-w-[70%] flex flex-col gap-1 ${isUser ? 'items-end' : 'items-start'}`}>
         {message.content_type === 'image' && (message.image_preview || message.image_url) && (
           <div className="rounded-2xl overflow-hidden border border-border max-w-[280px]">
-            <img src={message.image_preview || message.image_url} alt="图片" className="w-full block" loading="lazy" />
+            <img src={message.image_preview || message.image_url} alt={t('chat.imagePreviewAlt')} className="w-full block" loading="lazy" />
           </div>
         )}
 
@@ -61,10 +63,6 @@ export default function MessageBubble({ message, persona, isFirst }: Props) {
               </div>
             ) : (
               <span className="whitespace-pre-wrap break-words">{message.content}</span>
-            )}
-
-            {isAI && !message.is_typing && message.content && message.id.startsWith('typing-') && (
-              <span className="inline-block w-0.5 h-4 bg-primary ml-0.5 animate-pulse align-middle" />
             )}
           </div>
         )}

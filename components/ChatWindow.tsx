@@ -1,10 +1,11 @@
 'use client'
 
 import { useEffect, useRef } from 'react'
+import { motion } from 'framer-motion'
 import { Persona, Message, ReplyLanguage } from '@/types'
 import MessageBubble from './MessageBubble'
 import InputArea from './InputArea'
-import { motion } from 'framer-motion'
+import { useI18n } from '@/lib/i18n/context'
 
 interface Props {
   persona: Persona | null
@@ -25,6 +26,7 @@ export default function ChatWindow({
   onStartVoiceCall,
   voiceCallOpen,
 }: Props) {
+  const { dict, t } = useI18n()
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const isStreaming = messages.some(m => m.is_typing)
 
@@ -39,14 +41,14 @@ export default function ChatWindow({
           {persona?.avatar || '*'}
         </div>
         <div className="flex-1 min-w-0">
-          <h2 className="font-serif text-base text-foreground truncate">{persona?.name || 'Loading...'}</h2>
+          <h2 className="font-serif text-base text-foreground truncate">{persona?.name || t('common.loading')}</h2>
           <div className="text-xs text-muted-foreground mt-0.5">
             {isStreaming ? (
-              <span className="text-primary animate-pulse">Typing...</span>
+              <span className="text-primary animate-pulse">{t('app.typing')}</span>
             ) : (
               <div className="flex items-center gap-1.5">
                 <div className="w-1.5 h-1.5 rounded-full bg-primary glow-dot" />
-                <span>Online</span>
+                <span>{t('common.online')}</span>
               </div>
             )}
           </div>
@@ -56,7 +58,7 @@ export default function ChatWindow({
           value={replyLanguage}
           onChange={e => onReplyLanguageChange(e.target.value as ReplyLanguage)}
           className="h-9 rounded-lg border border-border bg-secondary/40 px-2 text-[12px] lowercase text-muted-foreground outline-none focus:border-primary/40"
-          title="Language"
+          title={t('chat.language')}
           disabled={isStreaming}
         >
           <option value="zh">cn</option>
@@ -76,11 +78,11 @@ export default function ChatWindow({
               {persona.avatar || '*'}
             </div>
             <h3 className="font-serif text-xl text-foreground mb-2">{persona.name}</h3>
-            <p className="text-muted-foreground text-sm max-w-md leading-relaxed">Say hi and start chatting.</p>
+            <p className="text-muted-foreground text-sm max-w-md leading-relaxed">{t('chat.welcome')}</p>
             <div className="flex flex-wrap gap-2 mt-6 justify-center">
-              {['Hello', 'How are you today?', 'Tell me a story'].map((hint, i) => (
+              {dict.chat.starterPrompts.map(hint => (
                 <button
-                  key={i}
+                  key={hint}
                   onClick={() => onSendMessage(hint)}
                   className="px-4 py-2 rounded-full border border-border text-sm text-muted-foreground hover:text-foreground hover:border-primary/30 hover:bg-primary/5 transition-all"
                 >

@@ -5,6 +5,8 @@ import { AnimatePresence, motion } from 'framer-motion'
 import { Search, X, MessageSquare, Phone, Trash2, Pin, MoreHorizontal, Pencil } from 'lucide-react'
 import type { ChatSessionSummary } from '@/types'
 import { apiUrl } from '@/lib/api-url'
+import { useI18n } from '@/lib/i18n/context'
+import { formatRelativeTime } from '@/lib/i18n/format'
 
 interface Props {
   isOpen: boolean
@@ -23,6 +25,7 @@ export default function ChatHistoryPanel({
   onSelectSession,
   onDeletedSession,
 }: Props) {
+  const { locale, t } = useI18n()
   const [search, setSearch] = useState('')
   const [activeMenu, setActiveMenu] = useState<string | null>(null)
   const [sessions, setSessions] = useState<ChatSessionSummary[]>([])
@@ -55,13 +58,13 @@ export default function ChatHistoryPanel({
   }, [isOpen, refreshKey])
 
   const filtered = useMemo(() => {
-    const keyword = search.trim()
+    const keyword = search.trim().toLowerCase()
     if (!keyword) return sessions
     return sessions.filter(
       s =>
-        s.title.includes(keyword) ||
-        s.last_message_preview.includes(keyword) ||
-        (s.persona_name || '').includes(keyword),
+        s.title.toLowerCase().includes(keyword) ||
+        s.last_message_preview.toLowerCase().includes(keyword) ||
+        (s.persona_name || '').toLowerCase().includes(keyword),
     )
   }, [search, sessions])
 
@@ -141,7 +144,7 @@ export default function ChatHistoryPanel({
           className="fixed lg:relative z-30 w-[320px] h-full flex flex-col bg-sidebar border-r border-sidebar-border"
         >
           <div className="flex items-center justify-between px-5 py-4 border-b border-sidebar-border">
-            <h2 className="font-serif text-base text-foreground">聊天记录</h2>
+            <h2 className="font-serif text-base text-foreground">{t('history.title')}</h2>
             <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-sidebar-accent transition-colors">
               <X className="w-4 h-4 text-muted-foreground" />
             </button>
@@ -153,7 +156,7 @@ export default function ChatHistoryPanel({
               <input
                 value={search}
                 onChange={e => setSearch(e.target.value)}
-                placeholder="搜索聊天记录..."
+                placeholder={t('history.searchPlaceholder')}
                 className="w-full bg-input border border-border rounded-xl py-2.5 pl-9 pr-4 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary/40 transition-all"
               />
               {search && (
@@ -169,18 +172,19 @@ export default function ChatHistoryPanel({
 
           <div className="flex-1 overflow-y-auto scrollbar-thin px-2 pb-4">
             {loading ? (
-              <div className="py-12 text-center text-sm text-muted-foreground">加载中...</div>
+              <div className="py-12 text-center text-sm text-muted-foreground">{t('common.loading')}</div>
             ) : (
               <>
                 {pinned.length > 0 && (
                   <div className="mb-3">
                     <div className="px-3 py-2 text-[11px] font-medium text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
                       <Pin className="w-3 h-3" />
-                      置顶
+                      {t('history.pinned')}
                     </div>
                     {pinned.map(session => (
                       <SessionItem
                         key={session.id}
+                        locale={locale}
                         session={session}
                         isActive={session.id === currentSessionId}
                         isMenuOpen={activeMenu === session.id}
@@ -201,10 +205,11 @@ export default function ChatHistoryPanel({
 
                 {recent.length > 0 && (
                   <div>
-                    <div className="px-3 py-2 text-[11px] font-medium text-muted-foreground uppercase tracking-wider">最近</div>
+                    <div className="px-3 py-2 text-[11px] font-medium text-muted-foreground uppercase tracking-wider">{t('history.recent')}</div>
                     {recent.map(session => (
                       <SessionItem
                         key={session.id}
+                        locale={locale}
                         session={session}
                         isActive={session.id === currentSessionId}
                         isMenuOpen={activeMenu === session.id}
@@ -224,7 +229,7 @@ export default function ChatHistoryPanel({
                 )}
 
                 {filtered.length === 0 && (
-                  <div className="text-center py-12 text-muted-foreground text-sm">没有找到聊天记录</div>
+                  <div className="text-center py-12 text-muted-foreground text-sm">{t('history.empty')}</div>
                 )}
               </>
             )}
@@ -236,6 +241,7 @@ export default function ChatHistoryPanel({
 }
 
 function SessionItem({
+  locale,
   session,
   isActive,
   isMenuOpen,
@@ -250,6 +256,7 @@ function SessionItem({
   onTogglePin,
   onDelete,
 }: {
+  locale: 'zh' | 'en'
   session: ChatSessionSummary
   isActive: boolean
   isMenuOpen: boolean
@@ -264,6 +271,8 @@ function SessionItem({
   onTogglePin: () => void
   onDelete: () => void
 }) {
+  const { t } = useI18n()
+
   return (
     <div className="relative group">
       <button
@@ -298,9 +307,9 @@ function SessionItem({
             )}
             {session.session_type === 'voice' && <Phone className="w-3 h-3 text-primary flex-shrink-0" />}
           </div>
-          <p className="text-xs text-muted-foreground truncate">{session.last_message_preview || '暂无消息'}</p>
+          <p className="text-xs text-muted-foreground truncate">{session.last_message_preview || t('history.emptyPreview')}</p>
           <div className="flex items-center gap-2 mt-1.5">
-            <span className="text-[10px] text-muted-foreground">{formatTime(session.last_message_at)}</span>
+            <span className="text-[10px] text-muted-foreground">{formatRelativeTime(session.last_message_at, locale)}</span>
             {session.message_count > 0 && (
               <span className="text-[10px] text-muted-foreground flex items-center gap-0.5">
                 <MessageSquare className="w-2.5 h-2.5" />
@@ -336,39 +345,25 @@ function SessionItem({
               className="w-full flex items-center gap-2 px-3 py-2 text-xs text-foreground hover:bg-secondary transition-colors"
             >
               <Pencil className="w-3 h-3" />
-              重命名
+              {t('common.rename')}
             </button>
             <button
               onClick={onTogglePin}
               className="w-full flex items-center gap-2 px-3 py-2 text-xs text-foreground hover:bg-secondary transition-colors"
             >
               <Pin className="w-3 h-3" />
-              {session.is_pinned ? '取消置顶' : '置顶'}
+              {session.is_pinned ? t('common.unpin') : t('common.pin')}
             </button>
             <button
               onClick={onDelete}
               className="w-full flex items-center gap-2 px-3 py-2 text-xs text-destructive hover:bg-destructive/10 transition-colors"
             >
               <Trash2 className="w-3 h-3" />
-              删除
+              {t('common.delete')}
             </button>
           </motion.div>
         )}
       </AnimatePresence>
     </div>
   )
-}
-
-function formatTime(input: string): string {
-  const date = new Date(input)
-  const diff = Date.now() - date.getTime()
-  if (Number.isNaN(date.getTime())) return ''
-  const minutes = Math.floor(diff / 60000)
-  const hours = Math.floor(diff / 3600000)
-  const days = Math.floor(diff / 86400000)
-  if (minutes < 1) return '刚刚'
-  if (minutes < 60) return `${minutes}分钟前`
-  if (hours < 24) return `${hours}小时前`
-  if (days < 7) return `${days}天前`
-  return `${date.getMonth() + 1}/${date.getDate()}`
 }
