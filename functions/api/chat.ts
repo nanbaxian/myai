@@ -14,6 +14,7 @@ interface Env {
   DEEPINFRA_API_KEY: string
   GEMINI_API_KEY?: string
   GEMINI_VISION_MODEL?: string
+  VOICE_FAST_MODEL?: string
   DEEPINFRA_MODEL?: string
   DEEPINFRA_MAX_TOKENS?: string
   DEEPINFRA_COALESCE_CHARS?: string
@@ -132,8 +133,8 @@ export const onRequestPost: PagesFunction<Env> = async (ctx) => {
   const voiceFastReplyRule = voiceMode
     ? (
         replyLanguage === 'en'
-          ? '\n\n# Voice Fast Reply Mode\n- This reply is for live voice conversation.\n- Reply in 1 short sentence when possible, never more than 2 short sentences.\n- Prioritize immediate, natural spoken wording.\n- Avoid lists, preambles, and long explanations.\n- If the user asks a complex question, answer the core point first in the shortest useful way.'
-          : '\n\n# Voice Fast Reply Mode\n- 这是实时语音对话回复。\n- 尽量只回 1 句短句，最多 2 句短句。\n- 以口语自然、立刻能说出口为第一优先级。\n- 不要列点，不要铺垫，不要长解释。\n- 如果问题复杂，先用最短方式回答核心点。'
+          ? '\n\n# Voice Fast Reply Mode\n- This reply is for live voice conversation.\n- Hard limit: reply in 1 short sentence when possible, never more than 2 short sentences.\n- Keep the total output very short and easy to speak aloud.\n- Prioritize immediate, natural spoken wording.\n- Avoid lists, preambles, hedging, and long explanations.\n- If the user asks a complex question, answer only the core point first in the shortest useful way.'
+          : '\n\n# Voice Fast Reply Mode\n- 这是实时语音对话回复。\n- 硬限制：尽量只回 1 句短句，最多 2 句短句。\n- 总长度必须非常短，便于直接说出口。\n- 以口语自然、立刻能说出口为第一优先级。\n- 不要列点，不要铺垫，不要犹豫式废话，不要长解释。\n- 如果问题复杂，只先回答核心点，用最短方式说清。'
       )
     : ''
   const systemPrompt = buildSystemPrompt(persona, memoryForPrompt, message || '', replyLanguage) + hardLanguageRule + voiceFastReplyRule
@@ -170,12 +171,14 @@ export const onRequestPost: PagesFunction<Env> = async (ctx) => {
 
   // ⑤ 调用 Gemini 流式
   const maxOutputTokens = voiceMode
-    ? 96
+    ? 48
     : Number.parseInt(env.DEEPINFRA_MAX_TOKENS || '', 10)
   const coalesceChars = voiceMode
-    ? 6
+    ? 4
     : Number.parseInt(env.DEEPINFRA_COALESCE_CHARS || '', 10)
-  const deepinfraModel = env.DEEPINFRA_MODEL || 'meta-llama/Llama-3.2-3B-Instruct'
+  const deepinfraModel = voiceMode
+    ? (env.VOICE_FAST_MODEL || env.DEEPINFRA_MODEL || 'meta-llama/Llama-3.2-3B-Instruct')
+    : (env.DEEPINFRA_MODEL || 'meta-llama/Llama-3.2-3B-Instruct')
   const visionModel = env.GEMINI_VISION_MODEL || 'gemini-2.5-flash-lite'
   const provider = hasImage ? 'gemini' : 'deepinfra'
   if (debug) {
