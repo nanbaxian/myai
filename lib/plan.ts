@@ -3,6 +3,11 @@
 
 type UserPlan = 'free' | 'pro'
 
+type PlanEnv = {
+  SUPABASE_URL: string
+  SUPABASE_SERVICE_KEY: string
+}
+
 class SupabaseRest {
   constructor(private url: string, private key: string) {}
 
@@ -32,7 +37,7 @@ class SupabaseRest {
   }
 }
 
-export async function getUserPlan(env: any, userId: string): Promise<UserPlan> {
+export async function getUserPlan(env: PlanEnv, userId: string): Promise<UserPlan> {
   try {
     const db = new SupabaseRest(env.SUPABASE_URL, env.SUPABASE_SERVICE_KEY)
     const rows = await db.get<Array<{ plan: string }>>('user_plans', {

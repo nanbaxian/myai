@@ -3,10 +3,29 @@
 
 export type AuthUser = { userId: string; email?: string }
 
-function decodeB64urlJson(b64url: string): any {
+type TokenPayload = {
+  iss?: string
+  aud?: string
+  exp?: number
+}
+
+type SupabaseAuthEnv = {
+  SUPABASE_URL?: string
+  SUPABASE_ANON_KEY?: string
+  SUPABASE_SERVICE_KEY?: string
+  SUPABASE_JWT_ISS?: string
+  SUPABASE_JWT_AUD?: string
+}
+
+type CfFetchOptions = {
+  cacheTtl?: number
+  cacheEverything?: boolean
+}
+
+function decodeB64urlJson(b64url: string): TokenPayload {
   const bin = b64url.replace(/-/g, '+').replace(/_/g, '/')
   const pad = '='.repeat((4 - (bin.length % 4)) % 4)
-  return JSON.parse(atob(bin + pad))
+  return JSON.parse(atob(bin + pad)) as TokenPayload
 }
 
 function getBearerToken(req: Request): string | null {
@@ -15,7 +34,7 @@ function getBearerToken(req: Request): string | null {
   return m?.[1] ?? null
 }
 
-export async function verifySupabaseJwt(req: Request, env: any): Promise<AuthUser> {
+export async function verifySupabaseJwt(req: Request, env: SupabaseAuthEnv): Promise<AuthUser> {
   const token = getBearerToken(req)
   if (!token) throw new Error('Missing Authorization Bearer token')
 
@@ -36,7 +55,7 @@ export async function verifySupabaseJwt(req: Request, env: any): Promise<AuthUse
       apikey: apiKey,
       Authorization: `Bearer ${token}`,
     },
-    cf: { cacheTtl: 0, cacheEverything: false } as any,
+    cf: { cacheTtl: 0, cacheEverything: false } as CfFetchOptions,
   })
   console.log(
     `[auth:supabase ${reqId}] response status=${userRes.status} ok=${userRes.ok} ` +
