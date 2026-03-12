@@ -9,8 +9,10 @@
 CREATE TABLE IF NOT EXISTS personas (
   id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   name        TEXT NOT NULL DEFAULT '晓雨',
+  name_en     TEXT,
   avatar      TEXT NOT NULL DEFAULT '🌸',
   prompt      TEXT NOT NULL DEFAULT '',
+  prompt_en   TEXT,
   voice_id    TEXT,
   reply_style TEXT DEFAULT 'medium' CHECK (reply_style IN ('short','medium','long')),
   created_at  TIMESTAMPTZ DEFAULT NOW(),

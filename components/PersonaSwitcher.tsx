@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { Persona } from '@/types'
 import { apiUrl } from '@/lib/api-url'
 import { useI18n } from '@/lib/i18n/context'
+import { localizePersona } from '@/lib/persona-localization'
 
 interface Props {
   currentPersona: Persona | null
@@ -13,48 +14,32 @@ interface Props {
 
 export default function PersonaSwitcher({ currentPersona, onSwitch, onClose }: Props) {
   const { locale, t } = useI18n()
-  const presetPersonas: Omit<Persona, 'id'>[] =
-    locale === 'zh'
-      ? [
-          {
-            name: '晓雨',
-            avatar: '🌸',
-            reply_style: 'medium',
-            prompt: '你叫晓雨，温柔体贴，善解人意，喜欢文学和音乐，说话自然随性但有自己的观点。',
-          },
-          {
-            name: '小哲',
-            avatar: '🌊',
-            reply_style: 'medium',
-            prompt: '你叫小哲，理性冷静但不失温度，擅长倾听、分析问题并给出真诚建议。',
-          },
-          {
-            name: '阿福',
-            avatar: '🍀',
-            reply_style: 'short',
-            prompt: '你叫阿福，阳光开朗，轻松幽默，擅长用松弛感化解紧张情绪。',
-          },
-        ]
-      : [
-          {
-            name: 'Xiaoyu',
-            avatar: '🌸',
-            reply_style: 'medium',
-            prompt: 'Warm, observant, emotionally attentive, and softly expressive. Loves literature and music.',
-          },
-          {
-            name: 'Theo',
-            avatar: '🌊',
-            reply_style: 'medium',
-            prompt: 'Calm and analytical, but never cold. A strong listener who gives thoughtful advice.',
-          },
-          {
-            name: 'Afu',
-            avatar: '🍀',
-            reply_style: 'short',
-            prompt: 'Bright, playful, and easygoing. Good at easing tension with gentle humor.',
-          },
-        ]
+  const presetPersonas: Omit<Persona, 'id'>[] = [
+    {
+      name: '晓雨',
+      name_en: 'Xiaoyu',
+      avatar: '🌸',
+      reply_style: 'medium',
+      prompt: '你叫晓雨，温柔体贴，善解人意，喜欢文学和音乐，说话自然随性但有自己的观点。',
+      prompt_en: 'Warm, observant, emotionally attentive, and softly expressive. Loves literature and music.',
+    },
+    {
+      name: '小哲',
+      name_en: 'Theo',
+      avatar: '🌊',
+      reply_style: 'medium',
+      prompt: '你叫小哲，理性冷静但不失温度，擅长倾听、分析问题并给出真诚建议。',
+      prompt_en: 'Calm and analytical, but never cold. A strong listener who gives thoughtful advice.',
+    },
+    {
+      name: '阿福',
+      name_en: 'Afu',
+      avatar: '🍀',
+      reply_style: 'short',
+      prompt: '你叫阿福，阳光开朗，轻松幽默，擅长用松弛感化解紧张情绪。',
+      prompt_en: 'Bright, playful, and easygoing. Good at easing tension with warm humor.',
+    },
+  ]
 
   const [personas, setPersonas] = useState<Persona[]>([])
   const [loading, setLoading] = useState(true)
@@ -136,7 +121,14 @@ export default function PersonaSwitcher({ currentPersona, onSwitch, onClose }: P
       const res = await fetch(apiUrl('/api/personas'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: newName, avatar: newAvatar, prompt: newPrompt, reply_style: 'medium' }),
+        body: JSON.stringify({
+          name: newName,
+          name_en: locale === 'en' ? newName : null,
+          avatar: newAvatar,
+          prompt: newPrompt,
+          prompt_en: locale === 'en' ? newPrompt : null,
+          reply_style: 'medium',
+        }),
       })
       if (!res.ok) throw new Error('create failed')
       const created = (await res.json()) as Persona
@@ -183,7 +175,9 @@ export default function PersonaSwitcher({ currentPersona, onSwitch, onClose }: P
             <div className="font-serif text-[18px] text-ink">{t('personaSwitcher.title')}</div>
             <div className="text-xs text-ink-mute mt-0.5">{t('personaSwitcher.subtitle')}</div>
           </div>
-          <button onClick={onClose} className="w-8 h-8 rounded-lg hover:bg-paper-warm text-ink-mute flex items-center justify-center">×</button>
+          <button onClick={onClose} className="w-8 h-8 rounded-lg hover:bg-paper-warm text-ink-mute flex items-center justify-center">
+            ×
+          </button>
         </div>
 
         {error && <div className="mx-6 mt-3 px-3 py-2 rounded-lg text-xs bg-red-50 text-red-700 border border-red-200">{error}</div>}
@@ -194,37 +188,40 @@ export default function PersonaSwitcher({ currentPersona, onSwitch, onClose }: P
           ) : (
             <div className="space-y-2">
               <div className="text-[11px] uppercase tracking-widest text-ink-mute mb-2">{t('personaSwitcher.myPersonas')}</div>
-              {personas.map(p => (
-                <div
-                  key={p.id}
-                  onClick={() => switchTo(p)}
-                  className={`flex items-center gap-3 p-3.5 rounded-xl border cursor-pointer transition-all group ${
-                    p.id === currentPersona?.id ? 'border-accent bg-accent/5' : 'border-paper-deep bg-white hover:border-accent-soft hover:shadow-sm'
-                  }`}
-                >
-                  <div className="w-10 h-10 rounded-full bg-gradient-to-br from-accent-soft to-accent flex items-center justify-center text-xl flex-shrink-0">
-                    {p.avatar}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
-                      <span className="font-medium text-ink text-sm">{p.name}</span>
-                      {p.id === currentPersona?.id && <span className="text-[10px] px-2 py-0.5 rounded-full bg-accent/15 text-accent">{t('personaSwitcher.current')}</span>}
+              {personas.map(p => {
+                const displayPersona = localizePersona(p, locale) ?? p
+                return (
+                  <div
+                    key={p.id}
+                    onClick={() => switchTo(p)}
+                    className={`flex items-center gap-3 p-3.5 rounded-xl border cursor-pointer transition-all group ${
+                      p.id === currentPersona?.id ? 'border-accent bg-accent/5' : 'border-paper-deep bg-white hover:border-accent-soft hover:shadow-sm'
+                    }`}
+                  >
+                    <div className="w-10 h-10 rounded-full bg-gradient-to-br from-accent-soft to-accent flex items-center justify-center text-xl flex-shrink-0">
+                      {displayPersona.avatar}
                     </div>
-                    <div className="text-xs text-ink-mute mt-0.5 truncate">{p.prompt?.slice(0, 60)}...</div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className="font-medium text-ink text-sm">{displayPersona.name}</span>
+                        {p.id === currentPersona?.id && <span className="text-[10px] px-2 py-0.5 rounded-full bg-accent/15 text-accent">{t('personaSwitcher.current')}</span>}
+                      </div>
+                      <div className="text-xs text-ink-mute mt-0.5 truncate">{displayPersona.prompt?.slice(0, 60)}...</div>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      {switching === p.id && <span className="text-xs text-ink-mute animate-pulse">{t('personaSwitcher.switching')}</span>}
+                      {p.id !== currentPersona?.id && (
+                        <button
+                          onClick={e => deletePersona(p.id, e)}
+                          className="opacity-0 group-hover:opacity-100 w-7 h-7 rounded-lg text-ink-mute hover:text-accent hover:bg-red-50 flex items-center justify-center transition-all text-xs"
+                        >
+                          ×
+                        </button>
+                      )}
+                    </div>
                   </div>
-                  <div className="flex items-center gap-1">
-                    {switching === p.id && <span className="text-xs text-ink-mute animate-pulse">{t('personaSwitcher.switching')}</span>}
-                    {p.id !== currentPersona?.id && (
-                      <button
-                        onClick={e => deletePersona(p.id, e)}
-                        className="opacity-0 group-hover:opacity-100 w-7 h-7 rounded-lg text-ink-mute hover:text-accent hover:bg-red-50 flex items-center justify-center transition-all text-xs"
-                      >
-                        ×
-                      </button>
-                    )}
-                  </div>
-                </div>
-              ))}
+                )
+              })}
             </div>
           )}
 
@@ -233,6 +230,7 @@ export default function PersonaSwitcher({ currentPersona, onSwitch, onClose }: P
             <div className="grid grid-cols-3 gap-2">
               {presetPersonas.map(p => {
                 const exists = personas.some(ep => ep.name === p.name)
+                const displayPreset = localizePersona({ id: p.name, ...p }, locale) ?? ({ id: p.name, ...p } as Persona)
                 return (
                   <button
                     key={p.name}
@@ -242,9 +240,9 @@ export default function PersonaSwitcher({ currentPersona, onSwitch, onClose }: P
                       exists ? 'border-paper-deep bg-paper-warm opacity-50 cursor-not-allowed' : 'border-paper-deep bg-white hover:border-accent-soft hover:shadow-sm cursor-pointer'
                     }`}
                   >
-                    <div className="text-2xl mb-1.5">{p.avatar}</div>
-                    <div className="text-sm font-medium text-ink">{p.name}</div>
-                    <div className="text-[10px] text-ink-mute mt-0.5 line-clamp-2">{p.prompt.slice(0, 45)}...</div>
+                    <div className="text-2xl mb-1.5">{displayPreset.avatar}</div>
+                    <div className="text-sm font-medium text-ink">{displayPreset.name}</div>
+                    <div className="text-[10px] text-ink-mute mt-0.5 line-clamp-2">{displayPreset.prompt.slice(0, 45)}...</div>
                     {exists && <div className="text-[10px] text-ink-mute mt-1">{t('personaSwitcher.created')}</div>}
                   </button>
                 )

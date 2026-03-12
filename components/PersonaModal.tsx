@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from 'react'
 import { Persona } from '@/types'
 import { apiUrl } from '@/lib/api-url'
 import { useI18n } from '@/lib/i18n/context'
+import { dictionaries } from '@/lib/i18n/dictionaries'
 
 interface Props {
   persona: Persona | null
@@ -16,15 +17,18 @@ const EMOJI_OPTIONS = ['🌸', '🌙', '⭐', '🌊', '🦋', '🌿', '🔥', '�
 export default function PersonaModal({ persona, onSave, onClose }: Props) {
   const { dict, t } = useI18n()
   const [name, setName] = useState(persona?.name || '')
+  const [nameEn, setNameEn] = useState(persona?.name_en || '')
   const [avatar, setAvatar] = useState(persona?.avatar || '🌸')
   const [prompt, setPrompt] = useState(persona?.prompt || '')
+  const [promptEn, setPromptEn] = useState(persona?.prompt_en || '')
   const [replyStyle, setReplyStyle] = useState<'short' | 'medium' | 'long'>(persona?.reply_style || 'medium')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
 
   const overlayRef = useRef<HTMLDivElement>(null)
   const charCount = prompt.length
-  const isOver = charCount > 1000
+  const charCountEn = promptEn.length
+  const isOver = charCount > 1000 || charCountEn > 1000
 
   const handleOverlayClick = (e: React.MouseEvent) => {
     if (e.target === overlayRef.current) onClose()
@@ -54,7 +58,14 @@ export default function PersonaModal({ persona, onSave, onClose }: Props) {
       const res = await fetch(apiUrl('/api/persona'), {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, avatar, prompt, reply_style: replyStyle }),
+        body: JSON.stringify({
+          name,
+          name_en: nameEn.trim() || null,
+          avatar,
+          prompt,
+          prompt_en: promptEn.trim() || null,
+          reply_style: replyStyle,
+        }),
       })
 
       if (!res.ok) throw new Error('save failed')
@@ -111,6 +122,17 @@ export default function PersonaModal({ persona, onSave, onClose }: Props) {
           </div>
 
           <div>
+            <label className="field-label">{t('personaModal.nameEnglish')}</label>
+            <input
+              value={nameEn}
+              onChange={e => setNameEn(e.target.value)}
+              placeholder={t('personaModal.nameEnglishPlaceholder')}
+              className="field-input mt-1.5"
+              maxLength={40}
+            />
+          </div>
+
+          <div>
             <label className="field-label">
               {t('personaModal.prompt')}
               <span className="text-ink-mute font-normal text-[10px] ml-1 lowercase tracking-normal">{t('personaModal.promptHint')}</span>
@@ -126,6 +148,25 @@ export default function PersonaModal({ persona, onSave, onClose }: Props) {
             />
             <div className={`text-right text-[11px] mt-1 ${isOver ? 'text-accent font-medium' : 'text-ink-mute'}`}>
               {charCount} / 1000 {isOver && t('personaModal.overLimit')}
+            </div>
+          </div>
+
+          <div>
+            <label className="field-label">
+              {t('personaModal.promptEnglish')}
+              <span className="text-ink-mute font-normal text-[10px] ml-1 lowercase tracking-normal">{t('personaModal.promptEnglishHint')}</span>
+            </label>
+            <textarea
+              value={promptEn}
+              onChange={e => setPromptEn(e.target.value)}
+              placeholder={dictionaries.en.personaModal.promptPlaceholder}
+              rows={6}
+              className={`field-input mt-1.5 resize-y min-h-[150px] leading-[1.75] ${
+                charCountEn > 1000 ? 'border-accent focus:shadow-[0_0_0_3px_rgba(196,67,42,0.2)]' : ''
+              }`}
+            />
+            <div className={`text-right text-[11px] mt-1 ${charCountEn > 1000 ? 'text-accent font-medium' : 'text-ink-mute'}`}>
+              {charCountEn} / 1000 {charCountEn > 1000 && t('personaModal.overLimit')}
             </div>
           </div>
 

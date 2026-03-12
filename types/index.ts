@@ -1,8 +1,10 @@
 export interface Persona {
   id: string
   name: string
+  name_en?: string
   avatar: string
   prompt: string
+  prompt_en?: string
   reply_style: 'short' | 'medium' | 'long'
   voice_id?: string
 }

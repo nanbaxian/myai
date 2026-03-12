@@ -7,6 +7,7 @@ import { streamGemini, streamGeminiFlashLite } from '../../lib/gemini-client'
 import { syncChatSessionFromMessages } from '../../lib/chat-history'
 import type { Persona, ReplyLanguage } from '../../types/index'
 import { createApiLogger } from '../../lib/api-log'
+import { localizePersonaForReplyLanguage } from '../../lib/persona-localization'
 
 interface Env {
   BUCKET: R2Bucket
@@ -110,7 +111,7 @@ export const onRequestPost: PagesFunction<Env> = async (ctx) => {
   const sbKey = env.SUPABASE_SERVICE_KEY
 
   // ① 取活跃人设（先查 app_settings，再回退到第一个）
-  const persona = await getActivePersona(sbUrl, sbKey)
+  const persona = localizePersonaForReplyLanguage(await getActivePersona(sbUrl, sbKey), replyLanguage)
   if (!persona) {
     apiLog.fail('active persona not found', { stage: 'persona' })
     return errJson('未找到人设配置', 500)

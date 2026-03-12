@@ -12,6 +12,7 @@ import SettingsPanel from '@/components/SettingsPanel'
 import type { ChatSessionDetail, ChatSessionSummary, Message, Persona, ReplyLanguage } from '@/types'
 import { apiUrl } from '@/lib/api-url'
 import { useI18n } from '@/lib/i18n/context'
+import { localizePersona } from '@/lib/persona-localization'
 
 type Modal = 'persona' | 'memory' | 'switcher' | 'settings' | null
 
@@ -76,6 +77,7 @@ export default function HomeClient() {
   }, [defaultPersona])
 
   const activePersona = persona ?? defaultPersona
+  const displayPersona = localizePersona(activePersona, locale) ?? activePersona
 
   function resetConversation() {
     setMessages([])
@@ -302,7 +304,7 @@ export default function HomeClient() {
   return (
     <div className="flex h-screen bg-background overflow-hidden">
       <Sidebar
-        persona={activePersona}
+        persona={displayPersona}
         isOpen={sidebarOpen}
         onToggle={() => setSidebarOpen(!sidebarOpen)}
         onOpenSettings={() => setModal('settings')}
@@ -327,7 +329,7 @@ export default function HomeClient() {
       />
 
       <ChatWindow
-        persona={activePersona}
+        persona={displayPersona}
         messages={messages}
         replyLanguage={replyLanguage}
         onReplyLanguageChange={setReplyLanguage}
@@ -364,7 +366,7 @@ export default function HomeClient() {
 
       {voiceCallOpen && (
         <VoiceCallOverlay
-          persona={activePersona}
+          persona={displayPersona}
           isOpen={voiceCallOpen}
           onClose={() => setVoiceCallOpen(false)}
           replyLanguage={replyLanguage}
