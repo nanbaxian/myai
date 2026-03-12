@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
-import { Search, X, MessageSquare, Phone, Trash2, Pin, MoreHorizontal } from 'lucide-react'
+import { Search, X, MessageSquare, Phone, Trash2, Pin, MoreHorizontal, Pencil } from 'lucide-react'
 import type { ChatSessionSummary } from '@/types'
 import { apiUrl } from '@/lib/api-url'
 
@@ -27,6 +27,8 @@ export default function ChatHistoryPanel({
   const [activeMenu, setActiveMenu] = useState<string | null>(null)
   const [sessions, setSessions] = useState<ChatSessionSummary[]>([])
   const [loading, setLoading] = useState(false)
+  const [renamingId, setRenamingId] = useState<string | null>(null)
+  const [renameValue, setRenameValue] = useState('')
 
   useEffect(() => {
     if (!isOpen) return
@@ -82,12 +84,46 @@ export default function ChatHistoryPanel({
     }
   }
 
+  function beginRename(session: ChatSessionSummary) {
+    setRenamingId(session.id)
+    setRenameValue(session.title)
+    setActiveMenu(null)
+  }
+
+  function cancelRename() {
+    setRenamingId(null)
+    setRenameValue('')
+  }
+
+  async function submitRename(sessionId: string) {
+    const title = renameValue.trim()
+    if (!title) {
+      cancelRename()
+      return
+    }
+
+    try {
+      const res = await fetch(apiUrl(`/api/history/${sessionId}`), {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title }),
+      })
+      if (!res.ok) throw new Error('rename failed')
+      const updated = (await res.json()) as ChatSessionSummary
+      setSessions(prev => prev.map(item => (item.id === sessionId ? updated : item)))
+      cancelRename()
+    } catch {
+      // keep input open on failure
+    }
+  }
+
   async function deleteSession(sessionId: string) {
     try {
       const res = await fetch(apiUrl(`/api/history/${sessionId}`), { method: 'DELETE' })
       if (!res.ok) throw new Error('delete failed')
       setSessions(prev => prev.filter(item => item.id !== sessionId))
       setActiveMenu(null)
+      if (renamingId === sessionId) cancelRename()
       onDeletedSession?.(sessionId)
     } catch {
       // keep UI stable on failure
@@ -148,7 +184,13 @@ export default function ChatHistoryPanel({
                         session={session}
                         isActive={session.id === currentSessionId}
                         isMenuOpen={activeMenu === session.id}
+                        isRenaming={renamingId === session.id}
+                        renameValue={renamingId === session.id ? renameValue : ''}
+                        onRenameValueChange={setRenameValue}
+                        onCancelRename={cancelRename}
+                        onSubmitRename={() => submitRename(session.id)}
                         onToggleMenu={() => setActiveMenu(activeMenu === session.id ? null : session.id)}
+                        onBeginRename={() => beginRename(session)}
                         onSelect={() => onSelectSession(session.id)}
                         onTogglePin={() => togglePin(session)}
                         onDelete={() => deleteSession(session.id)}
@@ -166,7 +208,13 @@ export default function ChatHistoryPanel({
                         session={session}
                         isActive={session.id === currentSessionId}
                         isMenuOpen={activeMenu === session.id}
+                        isRenaming={renamingId === session.id}
+                        renameValue={renamingId === session.id ? renameValue : ''}
+                        onRenameValueChange={setRenameValue}
+                        onCancelRename={cancelRename}
+                        onSubmitRename={() => submitRename(session.id)}
                         onToggleMenu={() => setActiveMenu(activeMenu === session.id ? null : session.id)}
+                        onBeginRename={() => beginRename(session)}
                         onSelect={() => onSelectSession(session.id)}
                         onTogglePin={() => togglePin(session)}
                         onDelete={() => deleteSession(session.id)}
@@ -191,7 +239,13 @@ function SessionItem({
   session,
   isActive,
   isMenuOpen,
+  isRenaming,
+  renameValue,
+  onRenameValueChange,
+  onCancelRename,
+  onSubmitRename,
   onToggleMenu,
+  onBeginRename,
   onSelect,
   onTogglePin,
   onDelete,
@@ -199,7 +253,13 @@ function SessionItem({
   session: ChatSessionSummary
   isActive: boolean
   isMenuOpen: boolean
+  isRenaming: boolean
+  renameValue: string
+  onRenameValueChange: (value: string) => void
+  onCancelRename: () => void
+  onSubmitRename: () => void
   onToggleMenu: () => void
+  onBeginRename: () => void
   onSelect: () => void
   onTogglePin: () => void
   onDelete: () => void
@@ -207,7 +267,7 @@ function SessionItem({
   return (
     <div className="relative group">
       <button
-        onClick={onSelect}
+        onClick={isRenaming ? undefined : onSelect}
         className={`w-full text-left px-3 py-3 rounded-xl transition-all flex items-start gap-3 ${
           isActive ? 'bg-sidebar-accent border border-primary/20' : 'hover:bg-sidebar-accent'
         }`}
@@ -218,7 +278,24 @@ function SessionItem({
 
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 mb-0.5">
-            <span className="text-sm text-foreground font-medium truncate flex-1">{session.title}</span>
+            {isRenaming ? (
+              <input
+                value={renameValue}
+                onChange={e => onRenameValueChange(e.target.value)}
+                onClick={e => e.stopPropagation()}
+                onKeyDown={e => {
+                  e.stopPropagation()
+                  if (e.key === 'Enter') onSubmitRename()
+                  if (e.key === 'Escape') onCancelRename()
+                }}
+                onBlur={onSubmitRename}
+                maxLength={60}
+                autoFocus
+                className="h-8 flex-1 rounded-lg border border-primary/30 bg-input px-2.5 text-sm text-foreground outline-none focus:ring-2 focus:ring-primary/20"
+              />
+            ) : (
+              <span className="text-sm text-foreground font-medium truncate flex-1">{session.title}</span>
+            )}
             {session.session_type === 'voice' && <Phone className="w-3 h-3 text-primary flex-shrink-0" />}
           </div>
           <p className="text-xs text-muted-foreground truncate">{session.last_message_preview || '暂无消息'}</p>
@@ -234,24 +311,33 @@ function SessionItem({
         </div>
       </button>
 
-      <button
-        onClick={e => {
-          e.stopPropagation()
-          onToggleMenu()
-        }}
-        className="absolute top-3 right-2 p-1.5 rounded-lg opacity-0 group-hover:opacity-100 hover:bg-secondary transition-all"
-      >
-        <MoreHorizontal className="w-3.5 h-3.5 text-muted-foreground" />
-      </button>
+      {!isRenaming && (
+        <button
+          onClick={e => {
+            e.stopPropagation()
+            onToggleMenu()
+          }}
+          className="absolute top-3 right-2 p-1.5 rounded-lg opacity-0 group-hover:opacity-100 hover:bg-secondary transition-all"
+        >
+          <MoreHorizontal className="w-3.5 h-3.5 text-muted-foreground" />
+        </button>
+      )}
 
       <AnimatePresence>
-        {isMenuOpen && (
+        {isMenuOpen && !isRenaming && (
           <motion.div
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 0.95 }}
-            className="absolute top-10 right-2 z-20 glass-panel rounded-xl py-1 min-w-[120px] shadow-xl"
+            className="absolute top-10 right-2 z-20 glass-panel rounded-xl py-1 min-w-[140px] shadow-xl"
           >
+            <button
+              onClick={onBeginRename}
+              className="w-full flex items-center gap-2 px-3 py-2 text-xs text-foreground hover:bg-secondary transition-colors"
+            >
+              <Pencil className="w-3 h-3" />
+              重命名
+            </button>
             <button
               onClick={onTogglePin}
               className="w-full flex items-center gap-2 px-3 py-2 text-xs text-foreground hover:bg-secondary transition-colors"
