@@ -10,8 +10,6 @@ import { useI18n } from '@/lib/i18n/context'
 interface Props {
   persona: Persona | null
   messages: Message[]
-  replyLanguage: ReplyLanguage
-  onReplyLanguageChange: (lang: ReplyLanguage) => void
   onSendMessage: (text: string, imageBase64?: string, imagePreviewUrl?: string, replyLanguage?: ReplyLanguage) => Promise<string | null> | void
   onStartVoiceCall: () => void
   voiceCallOpen?: boolean
@@ -20,8 +18,6 @@ interface Props {
 export default function ChatWindow({
   persona,
   messages,
-  replyLanguage,
-  onReplyLanguageChange,
   onSendMessage,
   onStartVoiceCall,
   voiceCallOpen,
@@ -53,17 +49,6 @@ export default function ChatWindow({
             )}
           </div>
         </div>
-
-        <select
-          value={replyLanguage}
-          onChange={e => onReplyLanguageChange(e.target.value as ReplyLanguage)}
-          className="h-9 rounded-lg border border-border bg-secondary/40 px-2 text-[12px] lowercase text-muted-foreground outline-none focus:border-primary/40"
-          title={t('chat.language')}
-          disabled={isStreaming}
-        >
-          <option value="zh">cn</option>
-          <option value="en">en</option>
-        </select>
       </header>
 
       <div className="flex-1 overflow-y-auto px-4 md:px-6 py-4 space-y-4 scrollbar-thin">

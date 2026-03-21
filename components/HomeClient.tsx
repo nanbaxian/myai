@@ -331,8 +331,6 @@ export default function HomeClient() {
       <ChatWindow
         persona={displayPersona}
         messages={messages}
-        replyLanguage={replyLanguage}
-        onReplyLanguageChange={setReplyLanguage}
         onSendMessage={handleSendMessage}
         onStartVoiceCall={() => setVoiceCallOpen(true)}
         voiceCallOpen={voiceCallOpen}
