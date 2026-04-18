@@ -1,8 +1,7 @@
-# workers/wrangler-cron.toml
-# 独立 Cron Worker 配置
-# 部署命令：wrangler deploy --config workers/wrangler-cron.toml
+# workers/wrangler-cron.toml - standalone cron worker for KnowledgeOS
+# Deploy separately because Pages Functions do not support Cron Triggers.
 
-name = "xin-yu-cron"
+name = "knowledgeos-cron"
 main = "cron-worker.ts"
 compatibility_date = "2024-09-23"
 compatibility_flags = ["nodejs_compat"]
@@ -10,9 +9,19 @@ compatibility_flags = ["nodejs_compat"]
 [triggers]
 crons = ["0 2 * * *"]
 
-# Workers AI binding — 用于 @cf/baai/bge-m3 向量嵌入（1024维）
 [ai]
 binding = "AI"
 
-# 环境变量在 CF Dashboard 里配置（和 Pages 共用同一套值）
-# DEEPINFRA_API_KEY、SUPABASE_URL、SUPABASE_SERVICE_KEY
+[[kv_namespaces]]
+binding = "VOICE_KV"
+id = "b37aa1043f544632a002618ec4270bc2"
+
+[[r2_buckets]]
+binding = "BUCKET"
+bucket_name = "knowledgeos-assets"
+
+# Recreate these secrets in the Worker namespace:
+# DEEPINFRA_API_KEY
+# SUPABASE_URL
+# SUPABASE_SERVICE_KEY
+# CRON_SECRET

@@ -4,8 +4,9 @@ import './globals.css'
 
 export const metadata: Metadata = {
   metadataBase: new URL(getSiteUrl()),
-  title: 'Xinyu · AI Companion',
-  description: 'Your AI companion with memory, persona controls, and bilingual Chinese-English UI.',
+  title: 'KnowledgeOS | Enterprise RAG Knowledge Base SaaS',
+  description:
+    'Multi-tenant enterprise knowledge chatbot platform for document ingestion, citations, and auditable answers.',
 }
 
 export const viewport: Viewport = {

@@ -1,5 +1,5 @@
-import LocaleRedirect from '@/components/LocaleRedirect'
+import KnowledgeLanding from '@/components/KnowledgeLanding'
 
 export default function Home() {
-  return <LocaleRedirect />
+  return <KnowledgeLanding locale="en" />
 }

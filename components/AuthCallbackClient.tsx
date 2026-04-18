@@ -53,7 +53,7 @@ export default function AuthCallbackClient() {
         localStorage.setItem(localeStorageKey, nextLocale)
         if (!active) return
         setStatus('success')
-        router.replace(`/${nextLocale}`)
+        router.replace('/dashboard')
       } catch {
         if (!active) return
         setStatus('failed')
@@ -75,7 +75,7 @@ export default function AuthCallbackClient() {
         <div className="mx-auto mb-5 flex h-14 w-14 items-center justify-center rounded-2xl bg-primary/10 text-2xl">
           ✨
         </div>
-        <h1 className="font-serif text-2xl text-foreground">Xinyu</h1>
+        <h1 className="font-serif text-2xl text-foreground">KnowledgeOS</h1>
         <p className="mt-3 text-sm text-muted-foreground">
           {status === 'loading' ? text.loading : status === 'success' ? text.success : text.failed}
         </p>

@@ -1,6 +1,6 @@
 // workers/cron-worker.ts
 // 独立 Cloudflare Worker，专门处理 Cron Trigger
-// 部署命令：wrangler deploy workers/cron-worker.ts --name xin-yu-cron
+// 部署命令：wrangler deploy --config workers/wrangler-cron.toml
 //
 // 为什么需要独立 Worker？
 // CF Pages Functions 不支持 Cron Triggers，只有独立 Worker 才支持。

@@ -1,6 +1,5 @@
 import type { Metadata } from 'next'
 import { I18nProvider } from '@/lib/i18n/context'
-import { getDictionary } from '@/lib/i18n/dictionaries'
 import { getSiteUrl, isLocale, locales, type Locale } from '@/lib/i18n/config'
 
 export function generateStaticParams() {
@@ -14,12 +13,16 @@ export async function generateMetadata({
 }): Promise<Metadata> {
   const { locale: rawLocale } = await params
   const locale: Locale = isLocale(rawLocale) ? rawLocale : 'en'
-  const dict = getDictionary(locale)
   const siteUrl = getSiteUrl()
+  const isZh = locale === 'zh'
 
   return {
-    title: dict.metadata.title,
-    description: dict.metadata.description,
+    title: isZh
+      ? 'KnowledgeOS | 企业知识库 RAG SaaS'
+      : 'KnowledgeOS | Enterprise RAG Knowledge Base SaaS',
+    description: isZh
+      ? '面向企业的多租户知识库问答平台，支持文档接入、引用溯源和可审计聊天历史。'
+      : 'Multi-tenant enterprise knowledge chatbot platform for document ingestion, citations, and auditable answers.',
     alternates: {
       canonical: `/${locale}`,
       languages: {
@@ -29,11 +32,15 @@ export async function generateMetadata({
       },
     },
     openGraph: {
-      title: dict.metadata.title,
-      description: dict.metadata.description,
+      title: isZh
+        ? 'KnowledgeOS | 企业知识库 RAG SaaS'
+        : 'KnowledgeOS | Enterprise RAG Knowledge Base SaaS',
+      description: isZh
+        ? '面向企业的多租户知识库问答平台，支持文档接入、引用溯源和可审计聊天历史。'
+        : 'Multi-tenant enterprise knowledge chatbot platform for document ingestion, citations, and auditable answers.',
       url: `${siteUrl}/${locale}`,
       locale: locale === 'zh' ? 'zh_CN' : 'en_US',
-      siteName: 'Xinyu',
+      siteName: 'KnowledgeOS',
       type: 'website',
     },
   }

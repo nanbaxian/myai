@@ -1,8 +1,8 @@
-# wrangler.toml — Cloudflare Pages 配置
-# ⚠️ Pages Functions 不支持 Cron Triggers
-# Cron 请用独立 Worker：wrangler deploy --config workers/wrangler-cron.toml
+# wrangler.toml - Cloudflare Pages configuration for KnowledgeOS
+# Recreate the Pages project and bindings in the Cloudflare dashboard before deploying.
+# Pages Functions do not support Cron Triggers, so the cron worker stays separate.
 
-name = "xin-yu"
+name = "knowledgeos-web"
 compatibility_date = "2024-09-23"
 compatibility_flags = ["nodejs_compat"]
 pages_build_output_dir = "out"
@@ -10,8 +10,6 @@ pages_build_output_dir = "out"
 [dev]
 port = 8788
 
-# Workers AI binding — 用于 @cf/baai/bge-m3 向量嵌入（1024维，60k tokens）
-# 避免调用 Gemini embedding API 被地区封锁（HKG/EU 等节点会被 Google 拒绝）
 [ai]
 binding = "AI"
 
@@ -21,13 +19,15 @@ id = "b37aa1043f544632a002618ec4270bc2"
 
 [[r2_buckets]]
 binding = "BUCKET"
-bucket_name = "myai"
-# 环境变量在 CF Dashboard > Pages > Settings > Environment variables 配置：
-# DEEPINFRA_API_KEY    = "..."
-# DEEPGRAM_API_KEY     = "..."   # Free ASR
-# GOOGLE_TTS_API_KEY   = "..."   # Free TTS
-# ELEVENLABS_API_KEY   = "..."   # Pro TTS
-# ELEVENLABS_VOICE_ID  = "..."   # Pro voice (optional)
-# SUPABASE_URL         = "..."
-# SUPABASE_SERVICE_KEY = "..."
-# CRON_SECRET          = "..."
+bucket_name = "knowledgeos-assets"
+
+# Cloudflare Dashboard variables to recreate:
+# NEXT_PUBLIC_SITE_URL=https://your-pages-domain
+# NEXT_PUBLIC_SUPABASE_URL=https://xxxxxxxx.supabase.co
+# NEXT_PUBLIC_SUPABASE_ANON_KEY=...
+# SUPABASE_SERVICE_KEY=...
+# SUPABASE_JWT_ISS=...
+# SUPABASE_JWT_AUD=authenticated
+# DEEPINFRA_API_KEY=...
+# GEMINI_API_KEY=... (for image/vision fallback)
+# CRON_SECRET=...
