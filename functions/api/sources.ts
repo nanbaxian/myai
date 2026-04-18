@@ -1,10 +1,8 @@
 import { createApiLogger } from '../../lib/api-log'
-import { json, listTable, mutateTable, options, readTenantId } from './_knowledgeos-shared'
+import { json, options } from './_knowledgeos-shared'
+import { listSources, readTenantId, type D1Env, type D1Source, upsertSource } from '../../lib/knowledgeos-d1'
 
-interface Env {
-  SUPABASE_URL?: string
-  SUPABASE_SERVICE_KEY?: string
-}
+interface Env extends D1Env {}
 
 export const onRequestOptions = options
 
@@ -12,7 +10,7 @@ export const onRequestGet: PagesFunction<Env> = async ctx => {
   const log = createApiLogger('knowledgeos:sources:get', ctx)
   log.start()
   const tenantId = readTenantId(ctx.request)
-  const rows = await listTable(ctx.env.SUPABASE_URL, ctx.env.SUPABASE_SERVICE_KEY, 'data_sources', `tenant_id=eq.${tenantId}&order=created_at.desc`)
+  const rows = await listSources(ctx.env, tenantId)
   if (rows) {
     log.ok({ tenantId, count: rows.length })
     return json(rows)
@@ -25,22 +23,23 @@ export const onRequestPost: PagesFunction<Env> = async ctx => {
   const log = createApiLogger('knowledgeos:sources:post', ctx)
   log.start()
   const tenantId = readTenantId(ctx.request)
-  const body = await ctx.request.json().catch(() => ({})) as Record<string, unknown>
-  const payload = {
-    id: `source_${Date.now()}`,
+  const body = await ctx.request.json().catch(() => ({})) as Partial<D1Source> & { config_json?: unknown }
+  const now = new Date().toISOString()
+  const payload: D1Source = {
+    id: String(body.id || `source_${Date.now()}`),
     tenant_id: tenantId,
     bot_id: body.bot_id ?? null,
     type: String(body.type || 'website'),
     name: String(body.name || 'New source'),
-    config_json: body.config_json && typeof body.config_json === 'object' ? body.config_json : {},
+    config_json: typeof body.config_json === 'string' ? body.config_json : JSON.stringify(body.config_json ?? {}),
     status: String(body.status || 'draft'),
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
+    created_at: now,
+    updated_at: now,
   }
-  const rows = await mutateTable(ctx.env.SUPABASE_URL, ctx.env.SUPABASE_SERVICE_KEY, 'data_sources', 'POST', payload)
-  if (rows?.[0]) {
-    log.ok({ tenantId, sourceId: String(rows[0].id ?? payload.id) })
-    return json(rows[0], 201)
+  const row = await upsertSource(ctx.env, payload)
+  if (row) {
+    log.ok({ tenantId, sourceId: row.id })
+    return json(row, 201)
   }
   log.ok({ tenantId, fallback: true })
   return json(payload, 201)

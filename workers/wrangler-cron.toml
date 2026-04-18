@@ -20,6 +20,9 @@ id = "b37aa1043f544632a002618ec4270bc2"
 binding = "BUCKET"
 bucket_name = "knowledgeos-assets"
 
+# Recreate the same D1 database binding here only if the cron worker later needs metadata access.
+# For now the cron worker only needs auth + storage bindings.
+#
 # Recreate these secrets in the Worker namespace:
 # DEEPINFRA_API_KEY
 # SUPABASE_URL

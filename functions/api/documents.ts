@@ -1,10 +1,8 @@
 import { createApiLogger } from '../../lib/api-log'
-import { json, listTable, mutateTable, options, readTenantId } from './_knowledgeos-shared'
+import { json, options } from './_knowledgeos-shared'
+import { listDocuments, readTenantId, type D1Document, type D1Env, upsertDocument } from '../../lib/knowledgeos-d1'
 
-interface Env {
-  SUPABASE_URL?: string
-  SUPABASE_SERVICE_KEY?: string
-}
+interface Env extends D1Env {}
 
 export const onRequestOptions = options
 
@@ -12,7 +10,7 @@ export const onRequestGet: PagesFunction<Env> = async ctx => {
   const log = createApiLogger('knowledgeos:documents:get', ctx)
   log.start()
   const tenantId = readTenantId(ctx.request)
-  const rows = await listTable(ctx.env.SUPABASE_URL, ctx.env.SUPABASE_SERVICE_KEY, 'documents', `tenant_id=eq.${tenantId}&order=created_at.desc`)
+  const rows = await listDocuments(ctx.env, tenantId)
   if (rows) {
     log.ok({ tenantId, count: rows.length })
     return json(rows)
@@ -25,9 +23,10 @@ export const onRequestPost: PagesFunction<Env> = async ctx => {
   const log = createApiLogger('knowledgeos:documents:post', ctx)
   log.start()
   const tenantId = readTenantId(ctx.request)
-  const body = await ctx.request.json().catch(() => ({})) as Record<string, unknown>
-  const payload = {
-    id: `doc_${Date.now()}`,
+  const body = await ctx.request.json().catch(() => ({})) as Partial<D1Document>
+  const now = new Date().toISOString()
+  const payload: D1Document = {
+    id: String(body.id || `doc_${Date.now()}`),
     tenant_id: tenantId,
     source_id: body.source_id ?? null,
     title: String(body.title || 'Untitled document'),
@@ -36,14 +35,14 @@ export const onRequestPost: PagesFunction<Env> = async ctx => {
     status: String(body.status || 'uploaded'),
     error_msg: body.error_msg ?? null,
     version: Number(body.version || 1),
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
-    deleted_at: null,
+    created_at: now,
+    updated_at: now,
+    deleted_at: body.deleted_at ?? null,
   }
-  const rows = await mutateTable(ctx.env.SUPABASE_URL, ctx.env.SUPABASE_SERVICE_KEY, 'documents', 'POST', payload)
-  if (rows?.[0]) {
-    log.ok({ tenantId, docId: String(rows[0].id ?? payload.id) })
-    return json(rows[0], 201)
+  const row = await upsertDocument(ctx.env, payload)
+  if (row) {
+    log.ok({ tenantId, docId: row.id })
+    return json(row, 201)
   }
   log.ok({ tenantId, fallback: true })
   return json(payload, 201)

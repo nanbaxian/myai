@@ -21,6 +21,10 @@ id = "b37aa1043f544632a002618ec4270bc2"
 binding = "BUCKET"
 bucket_name = "knowledgeos-assets"
 
+# Recreate a D1 database for the application metadata layer.
+# Suggested name: knowledgeos_app
+# Apply: schema-knowledgeos-d1.sql
+#
 # Cloudflare Dashboard variables to recreate:
 # NEXT_PUBLIC_SITE_URL=https://your-pages-domain
 # NEXT_PUBLIC_SUPABASE_URL=https://xxxxxxxx.supabase.co

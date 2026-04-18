@@ -28,6 +28,7 @@ This repository is being converted from a personal AI companion into a multi-ten
 - R2 bucket: `knowledgeos-assets`
 - KV binding: `VOICE_KV`
 - AI binding: `AI`
+- D1 database for app metadata: `knowledgeos_app`
 
 ## Environment variables
 
@@ -45,29 +46,35 @@ Set these in Cloudflare Pages and local dev as needed:
 
 ## Database
 
-Apply `schema-knowledgeos.sql` to your Postgres instance before wiring the API routes.
+Apply `schema-knowledgeos-d1.sql` to the Cloudflare D1 database before wiring the Pages Functions.
+
+Apply `schema-knowledgeos.sql` to the external Postgres instance later for RAG chunks and vectors.
 
 The schema includes:
 
-- tenants
-- users
-- tenant_members
-- bots
-- data_sources
-- documents
-- document_versions
-- document_chunks
-- qa_pairs
-- conversations
-- messages
-- message_citations
-- conversation_summaries
-- ingestion_jobs
-- crawl_jobs
-- reindex_jobs
-- bot_settings
-- usage_logs
-- retrieval_logs
+- D1 app metadata:
+  - tenants
+  - users
+  - tenant_members
+  - bots
+  - data_sources
+  - documents
+  - conversations
+  - messages
+  - message_citations
+  - bot_settings
+  - usage_logs
+  - retrieval_logs
+
+- external RAG storage:
+  - documents
+  - document_versions
+  - document_chunks
+  - qa_pairs
+  - conversation_summaries
+  - ingestion_jobs
+  - crawl_jobs
+  - reindex_jobs
 
 ## API scaffolds
 
@@ -90,4 +97,3 @@ Validated locally with:
 
 - `npm run build`
 - `npx wrangler deploy --dry-run --config workers/wrangler-cron.toml`
-

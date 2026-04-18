@@ -1,10 +1,8 @@
 import { createApiLogger } from '../../lib/api-log'
-import { json, listTable, options, readTenantId } from './_knowledgeos-shared'
+import { json, options } from './_knowledgeos-shared'
+import { listUsage, readTenantId, type D1Env } from '../../lib/knowledgeos-d1'
 
-interface Env {
-  SUPABASE_URL?: string
-  SUPABASE_SERVICE_KEY?: string
-}
+interface Env extends D1Env {}
 
 export const onRequestOptions = options
 
@@ -12,7 +10,7 @@ export const onRequestGet: PagesFunction<Env> = async ctx => {
   const log = createApiLogger('knowledgeos:usage:get', ctx)
   log.start()
   const tenantId = readTenantId(ctx.request)
-  const rows = await listTable(ctx.env.SUPABASE_URL, ctx.env.SUPABASE_SERVICE_KEY, 'usage_logs', `tenant_id=eq.${tenantId}&order=date.desc&limit=31`)
+  const rows = await listUsage(ctx.env, tenantId)
   if (rows) {
     log.ok({ tenantId, count: rows.length })
     return json(rows)
