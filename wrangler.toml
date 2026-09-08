@@ -2,7 +2,7 @@
 # Recreate the Pages project and bindings in the Cloudflare dashboard before deploying.
 # Pages Functions do not support Cron Triggers, so the cron worker stays separate.
 
-name = "knowledgeos-web"
+name = "myai"
 compatibility_date = "2024-09-23"
 compatibility_flags = ["nodejs_compat"]
 pages_build_output_dir = "out"
@@ -21,17 +21,14 @@ id = "b37aa1043f544632a002618ec4270bc2"
 binding = "BUCKET"
 bucket_name = "knowledgeos-assets"
 
-# Recreate a D1 database for the application metadata layer.
-# Suggested name: knowledgeos_app
-# Apply: schema-knowledgeos-d1.sql
-#
-# Cloudflare Dashboard variables to recreate:
-# NEXT_PUBLIC_SITE_URL=https://your-pages-domain
-# NEXT_PUBLIC_SUPABASE_URL=https://xxxxxxxx.supabase.co
-# NEXT_PUBLIC_SUPABASE_ANON_KEY=...
-# SUPABASE_SERVICE_KEY=...
-# SUPABASE_JWT_ISS=...
-# SUPABASE_JWT_AUD=authenticated
-# DEEPINFRA_API_KEY=...
-# GEMINI_API_KEY=... (for image/vision fallback)
-# CRON_SECRET=...
+# D1 Database binding
+# Create with: wrangler d1 create knowledgeos_db
+# Apply schema: wrangler d1 execute knowledgeos_db --file schema.sql
+[[d1_databases]]
+binding = "DB"
+database_name = "knowledgeos_db"
+database_id = "b28a40c9-1df9-47bb-addd-8c9f805f5eed"
+
+# Environment variables
+[env.production]
+vars = { NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY = "pk_test_c21hc2hpbmctdGVycmFwaW4tMjgyOC5jbGVyay5hY2NvdW50cy5kZXYk", CLERK_SECRET_KEY = "sk_test_BgV2SN0eFuOgAeD7xi4Jw0ecQk2WCSOXWrdPR4Aq7U" }

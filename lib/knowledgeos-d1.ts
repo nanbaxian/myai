@@ -424,3 +424,97 @@ export async function listRetrievalLogs(env: D1Env, tenantId: string): Promise<D
 export function parseSettings<T>(raw: string | null | undefined, fallback: T): T {
   return parseJson<T>(raw, fallback)
 }
+
+// Persona types and functions
+export type D1Persona = {
+  id: string
+  tenant_id: string
+  name: string
+  name_en?: string | null
+  avatar: string
+  prompt: string
+  prompt_en?: string | null
+  reply_style: 'short' | 'medium' | 'long'
+  voice_id?: string | null
+  is_active: number
+  created_at: string
+  updated_at: string
+}
+
+export async function getActivePersona(env: D1Env, tenantId: string): Promise<D1Persona | null> {
+  return dbFirst<D1Persona>(
+    env,
+    `SELECT * FROM personas WHERE tenant_id = ? AND is_active = 1 ORDER BY updated_at DESC LIMIT 1`,
+    [tenantId]
+  )
+}
+
+export async function getPersonaById(env: D1Env, personaId: string): Promise<D1Persona | null> {
+  return dbFirst<D1Persona>(
+    env,
+    `SELECT * FROM personas WHERE id = ? LIMIT 1`,
+    [personaId]
+  )
+}
+
+export async function listPersonas(env: D1Env, tenantId: string): Promise<D1Persona[] | null> {
+  return dbAll<D1Persona>(
+    env,
+    `SELECT * FROM personas WHERE tenant_id = ? ORDER BY created_at ASC`,
+    [tenantId]
+  )
+}
+
+export async function setActivePersona(env: D1Env, tenantId: string, personaId: string): Promise<D1Persona | null> {
+  // Deactivate all personas for this tenant
+  await dbRun(env, `UPDATE personas SET is_active = 0, updated_at = ? WHERE tenant_id = ?`, [isoNow(), tenantId])
+
+  // Activate the specified persona
+  const now = isoNow()
+  const rows = await dbAll<D1Persona>(
+    env,
+    `UPDATE personas SET is_active = 1, updated_at = ? WHERE id = ? AND tenant_id = ? RETURNING *`,
+    [now, personaId, tenantId]
+  )
+  return rows?.[0] ?? null
+}
+
+export async function upsertPersona(env: D1Env, persona: D1Persona): Promise<D1Persona | null> {
+  if (!env.DB) return null
+  const rows = await dbAll<D1Persona>(
+    env,
+    `INSERT INTO personas (id, tenant_id, name, name_en, avatar, prompt, prompt_en, reply_style, voice_id, is_active, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+     ON CONFLICT(id) DO UPDATE SET
+       tenant_id=excluded.tenant_id,
+       name=excluded.name,
+       name_en=excluded.name_en,
+       avatar=excluded.avatar,
+       prompt=excluded.prompt,
+       prompt_en=excluded.prompt_en,
+       reply_style=excluded.reply_style,
+       voice_id=excluded.voice_id,
+       is_active=excluded.is_active,
+       updated_at=excluded.updated_at
+     RETURNING *`,
+    [
+      persona.id,
+      persona.tenant_id,
+      persona.name,
+      persona.name_en || null,
+      persona.avatar,
+      persona.prompt,
+      persona.prompt_en || null,
+      persona.reply_style,
+      persona.voice_id || null,
+      persona.is_active,
+      persona.created_at,
+      persona.updated_at,
+    ]
+  )
+  return rows?.[0] ?? null
+}
+
+export async function deletePersona(env: D1Env, personaId: string): Promise<boolean> {
+  return dbRun(env, `DELETE FROM personas WHERE id = ?`, [personaId])
+}

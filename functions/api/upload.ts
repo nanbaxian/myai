@@ -1,14 +1,12 @@
-
 // functions/api/upload.ts
 // POST /api/upload — upload image/audio to Cloudflare R2, return { url, key, contentType }
-// Requires Supabase Auth (Authorization: Bearer <access_token>)
+// Requires Clerk Auth (Authorization: Bearer <clerk_token>)
 
-import { verifySupabaseJwt } from '@/lib/auth'
+import { verifyClerkToken } from '@/lib/api-middleware'
 import { createApiLogger } from '@/lib/api-log'
 
 interface Env {
   BUCKET: R2Bucket
-  SUPABASE_URL: string
 }
 
 const cors = {
@@ -28,7 +26,8 @@ export const onRequestPost: PagesFunction<Env> = async (ctx) => {
 
   let userId = 'unknown'
   try {
-    const auth = await verifySupabaseJwt(request, env)
+    const authHeader = request.headers.get('Authorization') || ''
+    const auth = await verifyClerkToken(authHeader)
     userId = auth.userId
     log.info('auth:ok', { userId })
   } catch (e: any) {

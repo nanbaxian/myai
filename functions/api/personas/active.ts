@@ -1,118 +1,84 @@
 // functions/api/personas/active.ts
 // GET /api/personas/active  PUT /api/personas/active
+// Uses Clerk for authentication + Cloudflare D1 for storage
 
-import type { Persona } from '../../../types/index'
 import { createApiLogger } from '../../../lib/api-log'
-
-interface Env {
-  SUPABASE_URL: string
-  SUPABASE_SERVICE_KEY: string
-}
-
-interface AppSetting { key: string; value: unknown }
+import { readTenantId, getActivePersona, setActivePersona, D1Env, type D1Persona } from '../../../lib/knowledgeos-d1'
+import { verifyClerkToken } from '../../../lib/api-middleware'
 
 const cors = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'GET, PUT, OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type',
-}
-
-function sb(key: string): Record<string, string> {
-  return { apikey: key, Authorization: `Bearer ${key}`, 'Content-Type': 'application/json', Prefer: 'return=representation' }
+  'Access-Control-Allow-Headers': 'Content-Type, Authorization',
 }
 
 function json(data: unknown, status = 200): Response {
-  return new Response(JSON.stringify(data), { status, headers: { ...cors, 'Content-Type': 'application/json' } })
+  return new Response(JSON.stringify(data), {
+    status,
+    headers: { ...cors, 'Content-Type': 'application/json' },
+  })
 }
 
 export const onRequestOptions = (): Response => new Response(null, { headers: cors })
 
-async function getActivePersonaId(supabaseUrl: string, key: string): Promise<string | null> {
-  try {
-    const res = await fetch(`${supabaseUrl}/rest/v1/app_settings?key=eq.active_persona_id`, { headers: sb(key) })
-    if (!res.ok) return null
-    const [row] = await res.json() as AppSetting[]
-    if (!row) return null
-    const val = row.value
-    if (typeof val === 'string') {
-      try { return JSON.parse(val) } catch { return val }
-    }
-    return String(val)
-  } catch {
-    return null
-  }
-}
-
-export const onRequestGet: PagesFunction<Env> = async (ctx) => {
-  const { env } = ctx
+export const onRequestGet: PagesFunction<D1Env> = async (ctx) => {
+  const { env, request } = ctx
   const log = createApiLogger('personas:active:get', ctx)
   log.start()
+
   try {
-    const personaId = await getActivePersonaId(env.SUPABASE_URL, env.SUPABASE_SERVICE_KEY)
+    // Verify Clerk JWT
+    const authHeader = request.headers.get('Authorization') || ''
+    const user = await verifyClerkToken(authHeader)
+    log.info({ userId: user.userId })
 
-    if (!personaId) {
-      const res = await fetch(`${env.SUPABASE_URL}/rest/v1/personas?limit=1`, { headers: sb(env.SUPABASE_SERVICE_KEY) })
-      const [p] = await res.json() as Persona[]
-      log.ok({ source: 'fallback', hasPersona: Boolean(p) })
-      return json(p ?? null)
-    }
+    // Get tenant ID from header or query
+    const tenantId = readTenantId(request)
 
-    const res = await fetch(`${env.SUPABASE_URL}/rest/v1/personas?id=eq.${personaId}&limit=1`, { headers: sb(env.SUPABASE_SERVICE_KEY) })
-    const [persona] = await res.json() as Persona[]
-    if (!persona) {
-      const fallback = await fetch(`${env.SUPABASE_URL}/rest/v1/personas?limit=1`, { headers: sb(env.SUPABASE_SERVICE_KEY) })
-      const [p] = await fallback.json() as Persona[]
-      log.ok({ source: 'fallback-deleted', hasPersona: Boolean(p), personaId })
-      return json(p ?? null)
-    }
-    log.ok({ personaId: persona.id })
-    return json(persona)
+    // Get active persona from D1
+    const persona = await getActivePersona(env, tenantId)
+
+    log.ok({ personaId: persona?.id || null, tenantId })
+    return json(persona || null)
   } catch (e) {
     log.fail(e)
-    return json({ error: '读取失败' }, 500)
+    return json({ error: 'Failed to get active persona' }, 500)
   }
 }
 
-export const onRequestPut: PagesFunction<Env> = async (ctx) => {
-  const { request, env } = ctx
+export const onRequestPut: PagesFunction<D1Env> = async (ctx) => {
+  const { env, request } = ctx
   const log = createApiLogger('personas:active:put', ctx)
   log.start()
+
   try {
-    const body = await request.json() as { persona_id?: string }
+    // Verify Clerk JWT
+    const authHeader = request.headers.get('Authorization') || ''
+    const user = await verifyClerkToken(authHeader)
+    log.info({ userId: user.userId })
+
+    const body = (await request.json()) as { persona_id?: string }
+
     if (!body.persona_id) {
       log.fail('persona_id required', { stage: 'validate' })
-      return json({ error: 'persona_id 不能为空' }, 400)
+      return json({ error: 'persona_id is required' }, 400)
     }
 
-    const existing = await getActivePersonaId(env.SUPABASE_URL, env.SUPABASE_SERVICE_KEY)
-    const value = JSON.stringify(body.persona_id)
+    const tenantId = readTenantId(request)
 
-    if (existing !== null) {
-      const patchRes = await fetch(`${env.SUPABASE_URL}/rest/v1/app_settings?key=eq.active_persona_id`, {
-        method: 'PATCH',
-        headers: sb(env.SUPABASE_SERVICE_KEY),
-        body: JSON.stringify({ value, updated_at: new Date().toISOString() }),
-      })
-      if (!patchRes.ok) {
-        log.fail('patch active persona failed', { stage: 'db', status: patchRes.status })
-        return json({ error: '更新失败' }, 500)
-      }
-    } else {
-      const insertRes = await fetch(`${env.SUPABASE_URL}/rest/v1/app_settings`, {
-        method: 'POST',
-        headers: sb(env.SUPABASE_SERVICE_KEY),
-        body: JSON.stringify({ key: 'active_persona_id', value, updated_at: new Date().toISOString() }),
-      })
-      if (!insertRes.ok) {
-        log.fail('insert active persona failed', { stage: 'db', status: insertRes.status })
-        return json({ error: '写入失败' }, 500)
-      }
+    // Set active persona in D1
+    const updated = await setActivePersona(env, tenantId, body.persona_id)
+
+    if (!updated) {
+      log.fail('Failed to update persona', { stage: 'db' })
+      return json({ error: 'Failed to update active persona' }, 500)
     }
-    log.ok({ personaId: body.persona_id })
-    return json({ success: true })
+
+    log.ok({ personaId: updated.id, tenantId })
+    return json({ success: true, persona: updated })
   } catch (e) {
     log.fail(e)
-    return json({ error: '更新失败' }, 500)
+    return json({ error: 'Failed to update active persona' }, 500)
   }
 }
 

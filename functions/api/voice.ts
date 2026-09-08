@@ -10,7 +10,7 @@
 // - 必须携带 Authorization: Bearer <supabase access_token>
 // - 后端使用 JWKS 验签（/auth/v1/certs）
 
-import { verifySupabaseJwt } from '@/lib/auth'
+import { verifyClerkToken } from '@/lib/api-middleware'
 import { getUserPlan } from '@/lib/plan'
 import { quotaKey, getUsedSeconds, addUsedSeconds, FREE_DAILY_SECONDS } from '@/lib/voice-quota'
 import { createApiLogger } from '@/lib/api-log'
@@ -137,7 +137,8 @@ export const onRequestPost: PagesFunction<Env> = async (ctx) => {
   // Auth required
   let userId = ''
   try {
-    const u = await verifySupabaseJwt(request, env)
+    const authHeader = request.headers.get('Authorization') || ''
+    const u = await verifyClerkToken(authHeader)
     userId = u.userId
     log.info('auth:ok', { userId })
   } catch (e) {
@@ -321,7 +322,8 @@ export const onRequestGet: PagesFunction<Env> = async (ctx) => {
   // Auth required
   let userId = ''
   try {
-    const u = await verifySupabaseJwt(request, env)
+    const authHeader = request.headers.get('Authorization') || ''
+    const u = await verifyClerkToken(authHeader)
     userId = u.userId
     log.info('auth:ok', { userId })
   } catch (e) {
