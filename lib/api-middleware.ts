@@ -11,8 +11,6 @@ export interface ApiContext {
   supabaseKey: string
 }
 
-const clerkPublicKey = process.env.CLERK_PUBLIC_KEY
-
 export function createSupabaseClient(url: string, key: string) {
   return createClient(url, key, {
     auth: { persistSession: false },
@@ -38,7 +36,7 @@ export async function verifyClerkToken(authHeader: string): Promise<AuthUser> {
       throw new Error(`Clerk verification failed: ${res.status}`)
     }
 
-    const data = (await res.json()) as any
+    const data = (await res.json()) as { sub?: string; user_id?: string; email?: string; email_verified?: boolean }
     return {
       userId: data.sub || data.user_id,
       email: data.email,

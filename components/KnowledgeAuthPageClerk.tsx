@@ -1,15 +1,13 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useMemo } from 'react'
 import Link from 'next/link'
-import { CheckCircle2, Mail, Loader } from 'lucide-react'
+import { CheckCircle2, Mail } from 'lucide-react'
 import { SignIn } from '@clerk/nextjs'
 
 type Mode = 'login' | 'register'
 
 export default function KnowledgeAuthPageClerk({ mode }: { mode: Mode }) {
-  const [email, setEmail] = useState('')
-  const [status, setStatus] = useState<'idle' | 'sending' | 'sent' | 'error'>('idle')
 
   const copy = useMemo(() => {
     if (mode === 'register') {
