@@ -1,5 +1,5 @@
-import KnowledgeAuthPage from '@/components/KnowledgeAuthPage'
+import KnowledgeAuthPageClerk from '@/components/KnowledgeAuthPageClerk'
 
 export default function RegisterPage() {
-  return <KnowledgeAuthPage mode="register" />
+  return <KnowledgeAuthPageClerk mode="register" />
 }

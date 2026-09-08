@@ -1,5 +1,5 @@
-import KnowledgeAuthPage from '@/components/KnowledgeAuthPage'
+import KnowledgeAuthPageClerk from '@/components/KnowledgeAuthPageClerk'
 
 export default function LoginPage() {
-  return <KnowledgeAuthPage mode="login" />
+  return <KnowledgeAuthPageClerk mode="login" />
 }
