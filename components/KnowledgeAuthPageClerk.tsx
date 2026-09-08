@@ -56,11 +56,8 @@ export default function KnowledgeAuthPageClerk({ mode }: { mode: Mode }) {
           {/* Clerk's built-in magic link component */}
           <div className="mt-6 clerk-style-override">
             <SignIn
-              mode="modal"
               afterSignInUrl="/dashboard"
-              afterSignUpUrl="/dashboard"
               signUpUrl="/auth/register"
-              redirectUrl="/dashboard"
             />
           </div>
 
