@@ -32,3 +32,19 @@ database_id = "b28a40c9-1df9-47bb-addd-8c9f805f5eed"
 # Environment variables
 [env.production]
 vars = { NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY = "pk_test_c21hc2hpbmctdGVycmFwaW4tMjgyOC5jbGVyay5hY2NvdW50cy5kZXYk", CLERK_SECRET_KEY = "sk_test_BgV2SN0eFuOgAeD7xi4Jw0ecQk2WCSOXWrdPR4Aq7U" }
+
+[env.production.ai]
+binding = "AI"
+
+[[env.production.kv_namespaces]]
+binding = "VOICE_KV"
+id = "b37aa1043f544632a002618ec4270bc2"
+
+[[env.production.r2_buckets]]
+binding = "BUCKET"
+bucket_name = "knowledgeos-assets"
+
+[[env.production.d1_databases]]
+binding = "DB"
+database_name = "knowledgeos_db"
+database_id = "b28a40c9-1df9-47bb-addd-8c9f805f5eed"
