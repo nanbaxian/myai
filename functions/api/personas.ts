@@ -7,7 +7,7 @@
 import { createApiLogger } from '../../lib/api-log'
 import { readTenantId, listPersonas, upsertPersona, deletePersona, D1Env, type D1Persona } from '../../lib/knowledgeos-d1'
 import { verifyClerkToken } from '../../lib/api-middleware'
-import { v4 as uuid } from 'crypto'
+import { randomUUID } from 'crypto'
 
 const cors = {
   'Access-Control-Allow-Origin': '*',
@@ -79,7 +79,7 @@ export const onRequestPost: PagesFunction<D1Env> = async ctx => {
     const now = new Date().toISOString()
 
     const persona: D1Persona = {
-      id: `persona_${uuid()}`,
+      id: `persona_${randomUUID()}`,
       tenant_id: tenantId,
       name: name.trim(),
       name_en: name_en?.trim() || null,
