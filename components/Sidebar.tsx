@@ -106,7 +106,7 @@ export default function Sidebar({
               </button>
             </div>
 
-            {persona && (
+            {persona && userEmail && (
               <div className="mx-4 mb-4 p-4 rounded-xl bg-sidebar-accent border border-sidebar-border">
                 <div className="flex items-center gap-3 mb-3">
                   <div className="w-10 h-10 rounded-full bg-primary/15 flex items-center justify-center text-xl border border-primary/20">
