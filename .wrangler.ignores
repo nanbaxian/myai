@@ -1,0 +1,5 @@
+# Wrangler ignore patterns
+**/.next/cache/**
+**/.next/static/**/.next/cache/**
+cache/
+.webpack_cache/
