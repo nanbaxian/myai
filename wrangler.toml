@@ -22,12 +22,10 @@ binding = "BUCKET"
 bucket_name = "knowledgeos-assets"
 
 # D1 Database binding
-# Create with: wrangler d1 create knowledgeos_db
-# Apply schema: wrangler d1 execute knowledgeos_db --file schema.sql
 [[d1_databases]]
-binding = "DB"
-database_name = "knowledgeos_db"
-database_id = "b28a40c9-1df9-47bb-addd-8c9f805f5eed"
+binding = "myai"
+database_name = "myai"
+database_id = "76ba054d-2fcf-4f15-8248-804d916fc729"
 
 # Environment variables
 [env.production]
@@ -45,6 +43,6 @@ binding = "BUCKET"
 bucket_name = "knowledgeos-assets"
 
 [[env.production.d1_databases]]
-binding = "DB"
-database_name = "knowledgeos_db"
-database_id = "b28a40c9-1df9-47bb-addd-8c9f805f5eed"
+binding = "myai"
+database_name = "myai"
+database_id = "76ba054d-2fcf-4f15-8248-804d916fc729"
