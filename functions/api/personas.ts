@@ -33,7 +33,7 @@ export const onRequestGet: PagesFunction<D1Env> = async ctx => {
     // Verify Clerk JWT
     const authHeader = request.headers.get('Authorization') || ''
     const user = await verifyClerkToken(authHeader)
-    log.info({ userId: user.userId })
+    log.info('auth:ok', { userId: user.userId })
 
     const tenantId = readTenantId(request)
     const personas = await listPersonas(env, tenantId)
@@ -55,7 +55,7 @@ export const onRequestPost: PagesFunction<D1Env> = async ctx => {
     // Verify Clerk JWT
     const authHeader = request.headers.get('Authorization') || ''
     const user = await verifyClerkToken(authHeader)
-    log.info({ userId: user.userId })
+    log.info('auth:ok', { userId: user.userId })
 
     const body = (await request.json()) as Partial<D1Persona>
     const { name, name_en, avatar, prompt, prompt_en, reply_style } = body
@@ -117,7 +117,7 @@ export const onRequestDelete: PagesFunction<D1Env> = async ctx => {
     // Verify Clerk JWT
     const authHeader = request.headers.get('Authorization') || ''
     const user = await verifyClerkToken(authHeader)
-    log.info({ userId: user.userId })
+    log.info('auth:ok', { userId: user.userId })
 
     const id = new URL(request.url).searchParams.get('id')
 

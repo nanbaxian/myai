@@ -1,4 +1,4 @@
-export type D1Env = { DB?: D1Database }
+export type D1Env = { myai?: D1Database }
 
 export type D1Tenant = {
   id: string
@@ -181,8 +181,8 @@ export function conversationSeed(tenantId: string, botId: string, title = 'New c
 }
 
 export async function dbAll<T>(env: D1Env, sql: string, params: unknown[] = []): Promise<T[] | null> {
-  if (!env.DB) return null
-  const stmt = params.length ? env.DB.prepare(sql).bind(...params) : env.DB.prepare(sql)
+  if (!env.myai) return null
+  const stmt = params.length ? env.myai.prepare(sql).bind(...params) : env.myai.prepare(sql)
   const result = await stmt.all<T>()
   return result.results
 }
@@ -193,14 +193,14 @@ export async function dbFirst<T>(env: D1Env, sql: string, params: unknown[] = []
 }
 
 export async function dbRun(env: D1Env, sql: string, params: unknown[] = []): Promise<boolean> {
-  if (!env.DB) return false
-  const stmt = params.length ? env.DB.prepare(sql).bind(...params) : env.DB.prepare(sql)
+  if (!env.myai) return false
+  const stmt = params.length ? env.myai.prepare(sql).bind(...params) : env.myai.prepare(sql)
   await stmt.run()
   return true
 }
 
 export async function upsertTenant(env: D1Env, tenant: D1Tenant): Promise<D1Tenant | null> {
-  if (!env.DB) return null
+  if (!env.myai) return null
   const rows = await dbAll<D1Tenant>(
     env,
     `INSERT INTO tenants (id, name, slug, plan, status, created_at, updated_at)
@@ -226,7 +226,7 @@ export async function listBots(env: D1Env, tenantId: string): Promise<D1Bot[] | 
 }
 
 export async function upsertBot(env: D1Env, bot: D1Bot): Promise<D1Bot | null> {
-  if (!env.DB) return null
+  if (!env.myai) return null
   const rows = await dbAll<D1Bot>(
     env,
     `INSERT INTO bots (id, tenant_id, name, persona, tone, welcome_msg, fallback_msg, language, settings_json, created_at, updated_at)
@@ -266,7 +266,7 @@ export async function listSources(env: D1Env, tenantId: string): Promise<D1Sourc
 }
 
 export async function upsertSource(env: D1Env, source: D1Source): Promise<D1Source | null> {
-  if (!env.DB) return null
+  if (!env.myai) return null
   const rows = await dbAll<D1Source>(
     env,
     `INSERT INTO data_sources (id, tenant_id, bot_id, type, name, config_json, status, created_at, updated_at)
@@ -298,7 +298,7 @@ export async function listDocuments(env: D1Env, tenantId: string): Promise<D1Doc
 }
 
 export async function upsertDocument(env: D1Env, doc: D1Document): Promise<D1Document | null> {
-  if (!env.DB) return null
+  if (!env.myai) return null
   const rows = await dbAll<D1Document>(
     env,
     `INSERT INTO documents (id, tenant_id, source_id, title, file_name, r2_key, status, error_msg, version, created_at, updated_at, deleted_at)
@@ -341,7 +341,7 @@ export async function deleteConversation(env: D1Env, conversationId: string): Pr
 }
 
 export async function upsertConversation(env: D1Env, conversation: D1Conversation): Promise<D1Conversation | null> {
-  if (!env.DB) return null
+  if (!env.myai) return null
   const rows = await dbAll<D1Conversation>(
     env,
     `INSERT INTO conversations (id, tenant_id, bot_id, created_by, title, channel, created_at, updated_at)
@@ -368,7 +368,7 @@ export async function listMessages(env: D1Env, conversationId: string, limit = 2
 }
 
 export async function insertMessage(env: D1Env, message: D1Message): Promise<D1Message | null> {
-  if (!env.DB) return null
+  if (!env.myai) return null
   const rows = await dbAll<D1Message>(
     env,
     `INSERT INTO messages (id, conversation_id, role, content, model, input_tokens, output_tokens, created_at)
@@ -380,7 +380,7 @@ export async function insertMessage(env: D1Env, message: D1Message): Promise<D1M
 }
 
 export async function updateConversationTouch(env: D1Env, conversationId: string, title?: string): Promise<void> {
-  if (!env.DB) return
+  if (!env.myai) return
   if (typeof title === 'string' && title.trim()) {
     await dbRun(
       env,
@@ -397,7 +397,7 @@ export async function listMembers(env: D1Env, tenantId: string): Promise<D1Membe
 }
 
 export async function upsertMember(env: D1Env, member: D1Member): Promise<D1Member | null> {
-  if (!env.DB) return null
+  if (!env.myai) return null
   const rows = await dbAll<D1Member>(
     env,
     `INSERT INTO tenant_members (tenant_id, user_id, role, invited_at, joined_at, created_at, updated_at)
@@ -480,7 +480,7 @@ export async function setActivePersona(env: D1Env, tenantId: string, personaId: 
 }
 
 export async function upsertPersona(env: D1Env, persona: D1Persona): Promise<D1Persona | null> {
-  if (!env.DB) return null
+  if (!env.myai) return null
   const rows = await dbAll<D1Persona>(
     env,
     `INSERT INTO personas (id, tenant_id, name, name_en, avatar, prompt, prompt_en, reply_style, voice_id, is_active, created_at, updated_at)

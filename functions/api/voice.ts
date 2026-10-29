@@ -158,7 +158,7 @@ export const onRequestPost: PagesFunction<Env> = async (ctx) => {
 
   if (ct.includes('application/json')) {
     audioSource = 'r2'
-    const body = await request.json().catch(() => null as any)
+    const body = (await request.json().catch(() => null)) as { audioUrl?: string; durationSeconds?: number; replyLanguage?: unknown } | null
     const audioUrl = body?.audioUrl as string | undefined
     durationSeconds = Number(body?.durationSeconds || 0)
     sttLanguage = normalizeSttLanguage(body?.replyLanguage)

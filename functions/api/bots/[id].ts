@@ -9,7 +9,7 @@ export const onRequestOptions = options
 export const onRequestGet: PagesFunction<Env, 'id'> = async ctx => {
   const log = createApiLogger('knowledgeos:bots:id:get', ctx)
   log.start()
-  const botId = ctx.params.id
+  const botId = (ctx.params.id as string)
   const row = await getBot(ctx.env, botId)
   if (row) {
     log.ok({ botId })
@@ -22,7 +22,7 @@ export const onRequestGet: PagesFunction<Env, 'id'> = async ctx => {
 export const onRequestPatch: PagesFunction<Env, 'id'> = async ctx => {
   const log = createApiLogger('knowledgeos:bots:id:patch', ctx)
   log.start()
-  const botId = ctx.params.id
+  const botId = (ctx.params.id as string)
   const tenantId = readTenantId(ctx.request)
   const body = await ctx.request.json().catch(() => ({})) as Partial<D1Bot> & { settings_json?: unknown }
   const now = new Date().toISOString()
@@ -51,7 +51,7 @@ export const onRequestPatch: PagesFunction<Env, 'id'> = async ctx => {
 export const onRequestDelete: PagesFunction<Env, 'id'> = async ctx => {
   const log = createApiLogger('knowledgeos:bots:id:delete', ctx)
   log.start()
-  const botId = ctx.params.id
+  const botId = (ctx.params.id as string)
   const ok = await deleteBot(ctx.env, botId)
   if (ok) {
     log.ok({ botId })

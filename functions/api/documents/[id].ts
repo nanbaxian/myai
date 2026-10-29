@@ -9,14 +9,14 @@ export const onRequestOptions = options
 export const onRequestGet: PagesFunction<Env, 'id'> = async ctx => {
   const log = createApiLogger('knowledgeos:documents:id:get', ctx)
   log.start()
-  const documentId = ctx.params.id
+  const documentId = (ctx.params.id as string)
   const row = await getDocument(ctx.env, documentId)
   if (row) return json(row)
   return json({ error: 'Document not found' }, 404)
 }
 
 export const onRequestPatch: PagesFunction<Env, 'id'> = async ctx => {
-  const documentId = ctx.params.id
+  const documentId = (ctx.params.id as string)
   const tenantId = readTenantId(ctx.request)
   const body = await ctx.request.json().catch(() => ({})) as Partial<D1Document>
   const now = new Date().toISOString()
@@ -39,6 +39,6 @@ export const onRequestPatch: PagesFunction<Env, 'id'> = async ctx => {
 }
 
 export const onRequestDelete: PagesFunction<Env, 'id'> = async ctx => {
-  const ok = await deleteDocument(ctx.env, ctx.params.id)
+  const ok = await deleteDocument(ctx.env, (ctx.params.id as string))
   return ok ? json({ success: true }) : json({ success: false }, 404)
 }

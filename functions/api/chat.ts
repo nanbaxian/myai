@@ -204,8 +204,8 @@ async function saveUsage(
   inputTokens: number,
   outputTokens: number,
 ): Promise<void> {
-  if (!env.DB) return
-  await env.DB.prepare(
+  if (!env.myai) return
+  await env.myai.prepare(
     `INSERT INTO usage_logs (id, tenant_id, bot_id, date, input_tokens, output_tokens, messages_count, queries_count, created_at)
      VALUES (?, ?, ?, ?, ?, ?, 1, 1, ?)
      ON CONFLICT(tenant_id, bot_id, date) DO UPDATE SET
@@ -226,8 +226,8 @@ async function saveRetrievalLog(
   chunks: RAGChunk[],
   latencyMs: number,
 ): Promise<void> {
-  if (!env.DB) return
-  await env.DB.prepare(
+  if (!env.myai) return
+  await env.myai.prepare(
     `INSERT INTO retrieval_logs (id, tenant_id, bot_id, query, chunks_retrieved, rerank_scores, latency_ms, created_at)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
   )
@@ -296,7 +296,7 @@ export const onRequestPost: PagesFunction<Env> = async ctx => {
 
   const botId = body.bot_id || 'bot_demo'
   let bot = await getBot(env, botId)
-  if (!bot && env.DB) {
+  if (!bot && env.myai) {
     bot = await upsertBot(env, botSeed(tenantId, { id: botId }))
   }
   if (!bot) {
@@ -312,7 +312,7 @@ export const onRequestPost: PagesFunction<Env> = async ctx => {
     message.slice(0, 32) || 'New conversation',
   )
 
-  const recentMessages = env.DB
+  const recentMessages = env.myai
     ? await listMessages(env, conversationId, 10)
     : null
   const history = Array.isArray(recentMessages) ? recentMessages : []
@@ -324,7 +324,7 @@ export const onRequestPost: PagesFunction<Env> = async ctx => {
   const systemPrompt = buildSystemPrompt(bot, tenantId, replyLanguage, rag.promptBlock, message)
   const messages = toGeminiHistory(history, message, imageBase64)
 
-  if (env.DB) {
+  if (env.myai) {
     await insertMessage(env, {
       id: crypto.randomUUID(),
       conversation_id: conversationId,
@@ -402,7 +402,7 @@ export const onRequestPost: PagesFunction<Env> = async ctx => {
             if (d.error) console.error(`[knowledgeos:chat ${reqId}] stream_error=${String(d.error).slice(0, 300)}`)
             if (d.done && !savedAi) {
               savedAi = true
-              if (env.DB) {
+              if (env.myai) {
                 void insertMessage(env, {
                   id: crypto.randomUUID(),
                   conversation_id: conversationId,
@@ -437,7 +437,7 @@ export const onRequestPost: PagesFunction<Env> = async ctx => {
           const d = JSON.parse(chatBuffer.slice(6)) as { done?: boolean }
           if (d.done) {
             savedAi = true
-            if (env.DB) {
+            if (env.myai) {
               void insertMessage(env, {
                 id: crypto.randomUUID(),
                 conversation_id: conversationId,

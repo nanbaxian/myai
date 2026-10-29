@@ -9,7 +9,7 @@ export const onRequestOptions = options
 export const onRequestGet: PagesFunction<Env, 'id'> = async ctx => {
   const log = createApiLogger('knowledgeos:sources:id:get', ctx)
   log.start()
-  const sourceId = ctx.params.id
+  const sourceId = (ctx.params.id as string)
   const row = await getSource(ctx.env, sourceId)
   if (row) {
     log.ok({ sourceId })
@@ -21,7 +21,7 @@ export const onRequestGet: PagesFunction<Env, 'id'> = async ctx => {
 export const onRequestPatch: PagesFunction<Env, 'id'> = async ctx => {
   const log = createApiLogger('knowledgeos:sources:id:patch', ctx)
   log.start()
-  const sourceId = ctx.params.id
+  const sourceId = (ctx.params.id as string)
   const tenantId = readTenantId(ctx.request)
   const body = await ctx.request.json().catch(() => ({})) as Partial<D1Source> & { config_json?: unknown }
   const now = new Date().toISOString()
@@ -42,6 +42,6 @@ export const onRequestPatch: PagesFunction<Env, 'id'> = async ctx => {
 }
 
 export const onRequestDelete: PagesFunction<Env, 'id'> = async ctx => {
-  const ok = await deleteSource(ctx.env, ctx.params.id)
+  const ok = await deleteSource(ctx.env, (ctx.params.id as string))
   return ok ? json({ success: true }) : json({ success: false }, 404)
 }

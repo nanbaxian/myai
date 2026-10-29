@@ -24,7 +24,6 @@ This repository is being converted from a personal AI companion into a multi-ten
 ## Cloudflare resources to recreate
 
 - Pages project name: `knowledgeos-web`
-- Cron worker name: `knowledgeos-cron`
 - R2 bucket: `knowledgeos-assets`
 - KV binding: `VOICE_KV`
 - AI binding: `AI`
@@ -96,4 +95,3 @@ These are intentionally scaffolded so the UI and route structure exist before th
 Validated locally with:
 
 - `npm run build`
-- `npx wrangler deploy --dry-run --config workers/wrangler-cron.toml`

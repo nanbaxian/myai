@@ -9,14 +9,14 @@ export const onRequestOptions = options
 export const onRequestGet: PagesFunction<Env, 'id'> = async ctx => {
   const log = createApiLogger('knowledgeos:conversations:id:get', ctx)
   log.start()
-  const conversationId = ctx.params.id
+  const conversationId = (ctx.params.id as string)
   const row = await getConversation(ctx.env, conversationId)
   if (row) return json(row)
   return json({ error: 'Conversation not found' }, 404)
 }
 
 export const onRequestPatch: PagesFunction<Env, 'id'> = async ctx => {
-  const conversationId = ctx.params.id
+  const conversationId = (ctx.params.id as string)
   const tenantId = readTenantId(ctx.request)
   const body = await ctx.request.json().catch(() => ({})) as Partial<D1Conversation>
   const now = new Date().toISOString()
@@ -35,6 +35,6 @@ export const onRequestPatch: PagesFunction<Env, 'id'> = async ctx => {
 }
 
 export const onRequestDelete: PagesFunction<Env, 'id'> = async ctx => {
-  const ok = await deleteConversation(ctx.env, ctx.params.id)
+  const ok = await deleteConversation(ctx.env, (ctx.params.id as string))
   return ok ? json({ success: true }) : json({ success: false }, 404)
 }

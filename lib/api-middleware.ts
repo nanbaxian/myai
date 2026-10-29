@@ -37,8 +37,11 @@ export async function verifyClerkToken(authHeader: string): Promise<AuthUser> {
     }
 
     const data = (await res.json()) as { sub?: string; user_id?: string; email?: string; email_verified?: boolean }
+    const userId = data.sub || data.user_id
+    if (!userId) throw new Error('Invalid Clerk token: missing user id')
+
     return {
-      userId: data.sub || data.user_id,
+      userId,
       email: data.email,
       emailVerified: data.email_verified,
     }

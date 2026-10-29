@@ -1,12 +1,11 @@
 // middleware.ts
 import { clerkMiddleware, createRouteMatcher } from '@clerk/nextjs/server'
 
+// API routes are not listed here: Clerk's protect() rewrites signed-out API
+// requests to an HTML page. The API handlers verify the Bearer token themselves.
 const isProtectedRoute = createRouteMatcher([
   '/dashboard(.*)',
   '/chat(.*)',
-  '/api/personas(.*)',
-  '/api/chat(.*)',
-  '/api/conversations(.*)',
 ])
 
 export default clerkMiddleware(async (auth, req) => {

@@ -1,11 +1,15 @@
-# wrangler.toml - Cloudflare Pages configuration for KnowledgeOS
-# Recreate the Pages project and bindings in the Cloudflare dashboard before deploying.
-# Pages Functions do not support Cron Triggers, so the cron worker stays separate.
+# wrangler.toml - Cloudflare Workers configuration for KnowledgeOS (OpenNext build)
+# Build with `npm run build:cf`, then deploy with `npm run deploy`.
+# Set the Clerk secret once with: npx wrangler secret put CLERK_SECRET_KEY
 
 name = "myai"
-compatibility_date = "2024-09-23"
-compatibility_flags = ["nodejs_compat"]
-pages_build_output_dir = ".next"
+main = ".open-next/worker.js"
+compatibility_date = "2025-05-05"
+compatibility_flags = ["nodejs_compat", "global_fetch_strictly_public"]
+
+[assets]
+directory = ".open-next/assets"
+binding = "ASSETS"
 
 [dev]
 port = 8788
@@ -27,22 +31,6 @@ binding = "myai"
 database_name = "myai"
 database_id = "76ba054d-2fcf-4f15-8248-804d916fc729"
 
-# Environment variables
-[env.production]
-vars = { NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY = "pk_test_c21hc2hpbmctdGVycmFwaW4tMjgyOC5jbGVyay5hY2NvdW50cy5kZXYk", CLERK_SECRET_KEY = "sk_test_BgV2SN0eFuOgAeD7xi4Jw0ecQk2WCSOXWrdPR4Aq7U" }
-
-[env.production.ai]
-binding = "AI"
-
-[[env.production.kv_namespaces]]
-binding = "VOICE_KV"
-id = "b37aa1043f544632a002618ec4270bc2"
-
-[[env.production.r2_buckets]]
-binding = "BUCKET"
-bucket_name = "knowledgeos-assets"
-
-[[env.production.d1_databases]]
-binding = "myai"
-database_name = "myai"
-database_id = "76ba054d-2fcf-4f15-8248-804d916fc729"
+# Public Clerk key only. The secret key is set with `wrangler secret put`.
+[vars]
+NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY = "pk_test_c21hc2hpbmctdGVycmFwaW4tMjgyOC5jbGVyay5hY2NvdW50cy5kZXYk"

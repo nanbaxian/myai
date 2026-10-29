@@ -15,7 +15,7 @@ export const onRequestGet: PagesFunction<Env> = async ctx => {
     log.ok({ tenantId })
     return json(row)
   }
-  if (ctx.env.DB) {
+  if (ctx.env.myai) {
     const seeded = await upsertTenant(ctx.env, tenantSeed(tenantId))
     if (seeded) {
       log.ok({ tenantId, seeded: true })
