@@ -2,8 +2,14 @@
 // POST /api/chat - KnowledgeOS RAG orchestration entry
 
 import { createApiLogger } from '../../lib/api-log'
-import { streamGemini, streamGeminiFlashLite, type GeminiMessage } from '../../lib/gemini-client'
 import { searchChunks } from '../../lib/kb/retrieve'
+import {
+  type ChatTurn,
+  DEFAULT_TEXT_MODEL,
+  DEFAULT_VISION_MODEL,
+  streamWorkersAi,
+  WorkersAiQuotaError,
+} from '../../lib/workers-ai-client'
 import { type ReplyLanguage } from '../../types/index'
 import {
   botSeed,
@@ -23,13 +29,10 @@ import {
 
 interface Env extends D1Env {
   BUCKET: R2Bucket
-  DEEPINFRA_API_KEY: string
-  GEMINI_API_KEY?: string
-  GEMINI_VISION_MODEL?: string
   VOICE_FAST_MODEL?: string
-  DEEPINFRA_MODEL?: string
-  DEEPINFRA_MAX_TOKENS?: string
-  DEEPINFRA_COALESCE_CHARS?: string
+  WORKERS_AI_MODEL?: string
+  WORKERS_AI_VISION_MODEL?: string
+  WORKERS_AI_MAX_TOKENS?: string
   RAG_API_URL?: string
   RAG_API_KEY?: string
   AI: Ai
@@ -157,13 +160,13 @@ async function loadRagContext(
   }
 }
 
-function toGeminiHistory(messages: D1Message[], currentUserText: string, imageBase64?: string): GeminiMessage[] {
-  const history: GeminiMessage[] = messages.map(msg => ({
+function toChatHistory(messages: D1Message[], currentUserText: string, imageBase64?: string): ChatTurn[] {
+  const history: ChatTurn[] = messages.map(msg => ({
     role: msg.role === 'assistant' ? 'model' : 'user',
     parts: [{ text: msg.content || '' }],
   }))
 
-  const parts: GeminiMessage['parts'] = []
+  const parts: ChatTurn['parts'] = []
   if (imageBase64) {
     parts.push({ inlineData: { mimeType: 'image/jpeg', data: imageBase64 } })
   }
@@ -346,7 +349,7 @@ export const onRequestPost: PagesFunction<Env> = async ctx => {
   await saveRetrievalLog(env, tenantId, bot.id, message, rag.chunks, Date.now() - ragStartedAt)
 
   const systemPrompt = buildSystemPrompt(bot, tenantId, replyLanguage, rag.promptBlock, message)
-  const messages = toGeminiHistory(history, message, imageBase64)
+  const messages = toChatHistory(history, message, imageBase64)
 
   if (env.myai) {
     await insertMessage(env, {
@@ -361,13 +364,13 @@ export const onRequestPost: PagesFunction<Env> = async ctx => {
     })
   }
 
-  const maxOutputTokens = voiceMode ? 64 : Number.parseInt(env.DEEPINFRA_MAX_TOKENS || '', 10)
-  const coalesceChars = voiceMode ? 4 : Number.parseInt(env.DEEPINFRA_COALESCE_CHARS || '', 10)
-  const deepinfraModel = voiceMode
-    ? (env.VOICE_FAST_MODEL || env.DEEPINFRA_MODEL || 'meta-llama/Llama-3.2-3B-Instruct')
-    : (env.DEEPINFRA_MODEL || 'meta-llama/Llama-3.2-3B-Instruct')
-  const visionModel = env.GEMINI_VISION_MODEL || 'gemini-2.5-flash-lite'
-  const provider = imageBase64 ? 'gemini' : 'deepinfra'
+  const maxOutputTokens = voiceMode ? 64 : Number.parseInt(env.WORKERS_AI_MAX_TOKENS || '', 10)
+  const textModel = voiceMode
+    ? (env.VOICE_FAST_MODEL || env.WORKERS_AI_MODEL || DEFAULT_TEXT_MODEL)
+    : (env.WORKERS_AI_MODEL || DEFAULT_TEXT_MODEL)
+  const visionModel = env.WORKERS_AI_VISION_MODEL || DEFAULT_VISION_MODEL
+  const model = imageBase64 ? visionModel : textModel
+  const provider = 'workers-ai'
 
   apiLog.info('generation:start', {
     tenantId,
@@ -381,29 +384,16 @@ export const onRequestPost: PagesFunction<Env> = async ctx => {
 
   let upstream: ReadableStream<Uint8Array>
   try {
-    if (imageBase64) {
-      if (!env.GEMINI_API_KEY) {
-        apiLog.fail('missing GEMINI_API_KEY', { stage: 'model', provider: 'gemini' })
-        return errJson('缺少 GEMINI_API_KEY（图片分析需要 Gemini）', 500)
-      }
-      upstream = await streamGeminiFlashLite(env.GEMINI_API_KEY, systemPrompt, messages, {
-        debug: true,
-        reqId,
-        model: visionModel,
-        maxOutputTokens: Number.isFinite(maxOutputTokens) ? maxOutputTokens : undefined,
-        coalesceChars: Number.isFinite(coalesceChars) ? coalesceChars : undefined,
-      })
-    } else {
-      upstream = await streamGemini(env.DEEPINFRA_API_KEY, systemPrompt, messages, {
-        debug: true,
-        reqId,
-        model: deepinfraModel,
-        maxOutputTokens: Number.isFinite(maxOutputTokens) ? maxOutputTokens : undefined,
-        coalesceChars: Number.isFinite(coalesceChars) ? coalesceChars : undefined,
-      })
-    }
+    upstream = await streamWorkersAi(env.AI, systemPrompt, messages, {
+      reqId,
+      model,
+      maxOutputTokens: Number.isFinite(maxOutputTokens) ? maxOutputTokens : undefined,
+    })
   } catch (error) {
     apiLog.fail(error, { stage: 'model', provider })
+    if (error instanceof WorkersAiQuotaError) {
+      return errJson('今日免费 AI 额度已用完，请明天再试或升级 Workers 付费计划', 429)
+    }
     return errJson('模型调用失败', 500)
   }
 
@@ -432,7 +422,7 @@ export const onRequestPost: PagesFunction<Env> = async ctx => {
                   conversation_id: conversationId,
                   role: 'assistant',
                   content: fullText || '...',
-                  model: imageBase64 ? visionModel : deepinfraModel,
+                  model,
                   input_tokens: 0,
                   output_tokens: 0,
                   created_at: new Date().toISOString(),
@@ -467,7 +457,7 @@ export const onRequestPost: PagesFunction<Env> = async ctx => {
                 conversation_id: conversationId,
                 role: 'assistant',
                 content: fullText || '...',
-                model: imageBase64 ? visionModel : deepinfraModel,
+                model,
                 input_tokens: 0,
                 output_tokens: 0,
                 created_at: new Date().toISOString(),

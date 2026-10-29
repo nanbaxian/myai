@@ -68,8 +68,9 @@ Sidebar 底部的登录入口跳转到 `/auth/login`，由 Clerk 处理登录和
 
 - 客户端：`NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY`（写在 `.env.local`，构建时注入）
 - 服务端 Worker：`CLERK_SECRET_KEY`（用 `npx wrangler secret put CLERK_SECRET_KEY` 设置）
-- `GEMINI_API_KEY`（图片分析专用，`/api/chat` 有图时走 `gemini-2.5-flash-lite`）
-- 可选：`GEMINI_VISION_MODEL`（默认 `gemini-2.5-flash-lite`）
+- 聊天、RAG 和图片分析全部走 Workers AI（`wrangler.toml` 的 `[ai]` 绑定，无需外部 API key）
+- 可选：`WORKERS_AI_MODEL`（默认 `@cf/meta/llama-3.1-8b-instruct`）、`WORKERS_AI_VISION_MODEL`（默认 `@cf/meta/llama-3.2-11b-vision-instruct`）、`WORKERS_AI_MAX_TOKENS`（默认 300）
+- 免费额度每天 10,000 Neurons，用完后 `/api/chat` 返回 429
 
 > `/api/voice` 已强制要求登录：请求必须带 `Authorization: Bearer <Clerk session token>`。
 
