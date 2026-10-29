@@ -3,6 +3,7 @@
 
 import { createApiLogger } from '../../lib/api-log'
 import { streamGemini, streamGeminiFlashLite, type GeminiMessage } from '../../lib/gemini-client'
+import { searchChunks } from '../../lib/kb/retrieve'
 import { type ReplyLanguage } from '../../types/index'
 import {
   botSeed,
@@ -36,9 +37,9 @@ interface Env extends D1Env {
 
 type RAGChunk = {
   title?: string
-  section?: string
+  section?: string | null
   source_url?: string
-  page_num?: number
+  page_num?: number | null
   content?: string
   score?: number
   source_label?: string
@@ -72,6 +73,36 @@ async function r2ImageUrlToBase64(env: Env, imageUrl: string): Promise<{ base64:
   return { base64: btoa(binary), mime }
 }
 
+// Retrieval from the knowledge base indexed in D1 (see functions/api/knowledge/ingest.ts).
+async function loadLocalRagContext(
+  env: Env,
+  tenantId: string,
+  query: string,
+  topK: number,
+): Promise<{ chunks: RAGChunk[]; promptBlock: string }> {
+  try {
+    const chunks = await searchChunks(env, tenantId, query, topK)
+    const promptBlock = chunks.length
+      ? chunks
+          .map((chunk, idx) => {
+            const location = [chunk.section, chunk.page_num ? `page ${chunk.page_num}` : null].filter(Boolean).join(' / ')
+            return [
+              `- ${chunk.source_label || `Source ${idx + 1}`}${location ? ` (${location})` : ''}`,
+              `  Excerpt: ${chunk.content.slice(0, 500)}`,
+            ].join('\n')
+          })
+          .join('\n\n')
+      : 'No matching passages were found in the knowledge base for this question. Say so instead of guessing.'
+    return { chunks, promptBlock }
+  } catch (error) {
+    console.error('[knowledgeos:rag] local retrieval failed', error)
+    return {
+      chunks: [],
+      promptBlock: 'Knowledge base retrieval failed. Respond carefully and avoid fabricating knowledge-base facts.',
+    }
+  }
+}
+
 async function loadRagContext(
   env: Env,
   tenantId: string,
@@ -80,14 +111,7 @@ async function loadRagContext(
   topK: number,
 ): Promise<{ chunks: RAGChunk[]; promptBlock: string }> {
   if (!env.RAG_API_URL) {
-    return {
-      chunks: [],
-      promptBlock: [
-        'No external RAG service is configured yet.',
-        'Answer from the conversation state and bot settings only.',
-        'If the user asks for knowledge-base facts, say the knowledge store is not yet connected.',
-      ].join('\n'),
-    }
+    return loadLocalRagContext(env, tenantId, query, topK)
   }
 
   try {

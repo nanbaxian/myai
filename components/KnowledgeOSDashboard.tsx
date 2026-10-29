@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import { BarChart3, Bot, CircleDollarSign, Database, FileText, LayoutDashboard, Users, ArrowUpRight } from 'lucide-react'
+import KnowledgeUploader from '@/components/KnowledgeUploader'
 
 type Section = 'overview' | 'sources' | 'bots' | 'conversations' | 'usage' | 'members' | 'embed'
 
@@ -11,13 +12,6 @@ const navItems: { key: Section; label: string; href: string; icon: typeof Layout
   { key: 'usage', label: 'Usage', href: '/dashboard/usage', icon: BarChart3 },
   { key: 'members', label: 'Members', href: '/dashboard/members', icon: Users },
   { key: 'embed', label: 'Embed', href: '/dashboard/embed', icon: CircleDollarSign },
-]
-
-const sources = [
-  { name: 'Company website', kind: 'Website', status: 'Indexing', docs: '24 pages' },
-  { name: 'Product manual', kind: 'PDF', status: 'Ready', docs: '12 chapters' },
-  { name: 'Sales enablement pack', kind: 'DOCX', status: 'Ready', docs: '8 files' },
-  { name: 'Support QA', kind: 'QA', status: 'Ready', docs: '146 pairs' },
 ]
 
 const bots = [
@@ -103,24 +97,7 @@ export default function KnowledgeOSDashboard({ section }: { section: Section }) 
             </div>
           )}
 
-          {section === 'sources' && (
-            <div className="mt-6 overflow-hidden rounded-[2rem] border border-white/10 bg-white/6 backdrop-blur-xl">
-              <div className="grid grid-cols-[1.8fr_1fr_1fr_1fr] border-b border-white/10 px-5 py-4 text-xs uppercase tracking-[0.24em] text-white/45">
-                <span>Name</span>
-                <span>Type</span>
-                <span>Status</span>
-                <span>Coverage</span>
-              </div>
-              {sources.map(item => (
-                <div key={item.name} className="grid grid-cols-[1.8fr_1fr_1fr_1fr] border-b border-white/6 px-5 py-4 text-sm last:border-b-0">
-                  <span className="font-medium text-white">{item.name}</span>
-                  <span className="text-white/65">{item.kind}</span>
-                  <span className="text-amber-100">{item.status}</span>
-                  <span className="text-white/65">{item.docs}</span>
-                </div>
-              ))}
-            </div>
-          )}
+          {section === 'sources' && <KnowledgeUploader />}
 
           {section === 'bots' && (
             <div className="mt-6 grid gap-4 md:grid-cols-3">
