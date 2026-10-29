@@ -8,7 +8,7 @@ export interface ChatTurn {
   parts: Array<{ text: string } | { inlineData: { mimeType: string; data: string } }>
 }
 
-export const DEFAULT_TEXT_MODEL = '@cf/meta/llama-3.1-8b-instruct'
+export const DEFAULT_TEXT_MODEL = '@cf/qwen/qwen3-30b-a3b-fp8'
 export const DEFAULT_VISION_MODEL = '@cf/meta/llama-3.2-11b-vision-instruct'
 
 export interface WorkersAiStreamOptions {

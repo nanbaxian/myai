@@ -2,9 +2,9 @@
 # Do not commit real secrets.
 
 NEXT_PUBLIC_SITE_URL=http://localhost:3000
-WORKERS_AI_MODEL=@cf/meta/llama-3.1-8b-instruct
+WORKERS_AI_MODEL=@cf/qwen/qwen3-30b-a3b-fp8
 WORKERS_AI_VISION_MODEL=@cf/meta/llama-3.2-11b-vision-instruct
-WORKERS_AI_MAX_TOKENS=300
+WORKERS_AI_MAX_TOKENS=200
 DEEPGRAM_API_KEY=your-deepgram-api-key-here
 DEEPGRAM_TTS_MODEL_EN=aura-2-thalia-en
 GOOGLE_TTS_API_KEY=your-google-tts-api-key-here

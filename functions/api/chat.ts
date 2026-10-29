@@ -345,7 +345,7 @@ export const onRequestPost: PagesFunction<Env> = async ctx => {
   const history = Array.isArray(recentMessages) ? recentMessages : []
 
   const ragStartedAt = Date.now()
-  const rag = await loadRagContext(env, tenantId, bot.id, message, 8)
+  const rag = await loadRagContext(env, tenantId, bot.id, message, 4)
   await saveRetrievalLog(env, tenantId, bot.id, message, rag.chunks, Date.now() - ragStartedAt)
 
   const systemPrompt = buildSystemPrompt(bot, tenantId, replyLanguage, rag.promptBlock, message)
