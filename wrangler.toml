@@ -33,4 +33,4 @@ database_id = "76ba054d-2fcf-4f15-8248-804d916fc729"
 
 # Public Clerk key only. The secret key is set with `wrangler secret put`.
 [vars]
-NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY = "pk_test_c21hc2hpbmctdGVycmFwaW4tMjgyOC5jbGVyay5hY2NvdW50cy5kZXYk"
+NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY = "pk_test_ZnVsbC1tYW5hdGVlLTEwLmNsZXJrLmFjY291bnRzLmRldiQ"
