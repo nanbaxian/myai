@@ -1,10 +1,8 @@
 import { deleteChatSession, getChatSession, patchChatSession } from '../../../lib/chat-history'
+import type { D1Env } from '../../../lib/knowledgeos-d1'
 import { createApiLogger } from '../../../lib/api-log'
 
-interface Env {
-  SUPABASE_URL: string
-  SUPABASE_SERVICE_KEY: string
-}
+type Env = D1Env
 
 const cors = {
   'Access-Control-Allow-Origin': '*',
@@ -33,7 +31,7 @@ export const onRequestGet: PagesFunction<Env> = async ctx => {
   try {
     const sessionId = sessionIdFromRequest(ctx.request)
     if (!sessionId) return json({ error: '缺少 session id' }, 400)
-    const session = await getChatSession(ctx.env.SUPABASE_URL, ctx.env.SUPABASE_SERVICE_KEY, sessionId)
+    const session = await getChatSession(ctx.env, sessionId)
     if (!session) return json({ error: '聊天记录不存在' }, 404)
     log.ok({ sessionId, messageCount: session.message_count })
     return json(session)
@@ -50,7 +48,7 @@ export const onRequestPatch: PagesFunction<Env> = async ctx => {
     const sessionId = sessionIdFromRequest(ctx.request)
     if (!sessionId) return json({ error: '缺少 session id' }, 400)
     const body = (await ctx.request.json()) as { title?: string; is_pinned?: boolean }
-    const session = await patchChatSession(ctx.env.SUPABASE_URL, ctx.env.SUPABASE_SERVICE_KEY, sessionId, body)
+    const session = await patchChatSession(ctx.env, sessionId, body)
     if (!session) return json({ error: '聊天记录不存在' }, 404)
     log.ok({ sessionId, isPinned: session.is_pinned })
     return json(session)
@@ -66,7 +64,7 @@ export const onRequestDelete: PagesFunction<Env> = async ctx => {
   try {
     const sessionId = sessionIdFromRequest(ctx.request)
     if (!sessionId) return json({ error: '缺少 session id' }, 400)
-    await deleteChatSession(ctx.env.SUPABASE_URL, ctx.env.SUPABASE_SERVICE_KEY, sessionId)
+    await deleteChatSession(ctx.env, sessionId)
     log.ok({ sessionId })
     return json({ success: true })
   } catch (e) {

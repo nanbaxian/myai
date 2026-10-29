@@ -1,10 +1,8 @@
 import { createChatSession, listChatSessions } from '../../../lib/chat-history'
+import type { D1Env } from '../../../lib/knowledgeos-d1'
 import { createApiLogger } from '../../../lib/api-log'
 
-interface Env {
-  SUPABASE_URL: string
-  SUPABASE_SERVICE_KEY: string
-}
+type Env = D1Env
 
 const cors = {
   'Access-Control-Allow-Origin': '*',
@@ -25,7 +23,7 @@ export const onRequestGet: PagesFunction<Env> = async ctx => {
   const log = createApiLogger('history:list', ctx)
   log.start()
   try {
-    const sessions = await listChatSessions(ctx.env.SUPABASE_URL, ctx.env.SUPABASE_SERVICE_KEY)
+    const sessions = await listChatSessions(ctx.env)
     log.ok({ count: sessions.length })
     return json(sessions)
   } catch (e) {
@@ -44,7 +42,7 @@ export const onRequestPost: PagesFunction<Env> = async ctx => {
       session_type?: 'text' | 'voice'
     }
 
-    const session = await createChatSession(ctx.env.SUPABASE_URL, ctx.env.SUPABASE_SERVICE_KEY, {
+    const session = await createChatSession(ctx.env, {
       title: body.title,
       persona_id: body.persona_id,
       session_type: body.session_type,

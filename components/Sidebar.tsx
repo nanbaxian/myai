@@ -1,6 +1,5 @@
 'use client'
 
-import { useEffect, useState } from 'react'
 import type { ComponentType } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import {
@@ -17,8 +16,8 @@ import {
   UserRoundPen,
 } from 'lucide-react'
 import type { Persona } from '@/types'
-import { supabase } from '@/lib/supabase-browser'
-import AuthWidget from '@/components/AuthWidget'
+import Link from 'next/link'
+import { useClerk, useUser } from '@clerk/nextjs'
 import { useI18n } from '@/lib/i18n/context'
 
 interface Props {
@@ -48,28 +47,12 @@ export default function Sidebar({
   onNewChat,
 }: Props) {
   const { t } = useI18n()
-  const [userEmail, setUserEmail] = useState<string | null>(null)
-
-  useEffect(() => {
-    let active = true
-
-    supabase.auth.getSession().then(({ data }) => {
-      if (!active) return
-      setUserEmail(data.session?.user?.email ?? null)
-    })
-
-    const { data: sub } = supabase.auth.onAuthStateChange((_evt, sess) => {
-      setUserEmail(sess?.user?.email ?? null)
-    })
-
-    return () => {
-      active = false
-      sub.subscription.unsubscribe()
-    }
-  }, [])
+  const { user } = useUser()
+  const { signOut } = useClerk()
+  const userEmail = user?.primaryEmailAddress?.emailAddress ?? null
 
   const onLogout = async () => {
-    await supabase.auth.signOut()
+    await signOut()
   }
 
   return (
@@ -154,7 +137,9 @@ export default function Sidebar({
                   </button>
                 </div>
               ) : (
-                <AuthWidget />
+                <Link href="/auth/login" className="block text-xs text-muted-foreground hover:text-foreground transition-colors">
+                  {t('auth.login')}
+                </Link>
               )}
             </div>
           </motion.aside>

@@ -1,5 +1,5 @@
-import KnowledgeAuthPage from '@/components/KnowledgeAuthPage'
+import { redirect } from 'next/navigation'
 
 export default function AuthIndexPage() {
-  return <KnowledgeAuthPage mode="login" />
+  redirect('/auth/login')
 }

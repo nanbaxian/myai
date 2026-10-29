@@ -38,7 +38,6 @@
     "cf-env.d.ts",
     "components/**/*.ts",
     "components/**/*.tsx",
-    "lib/supabase-browser.ts",
     "next-env.d.ts",
     "next.config.ts",
     "types/**/*.ts",

@@ -1,3 +1,0 @@
-ALTER TABLE personas
-  ADD COLUMN IF NOT EXISTS name_en TEXT,
-  ADD COLUMN IF NOT EXISTS prompt_en TEXT;

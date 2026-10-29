@@ -20,20 +20,18 @@
 | `memory-engine.ts` | `lib/memory-engine.ts` | 向量嵌入生成 + 语义搜索 |
 | `context-builder.ts` | `lib/context-builder.ts` | 语义匹配记忆注入 |
 
-## 数据库补丁
+## 数据库（Cloudflare D1）
 
-在 Supabase SQL Editor 执行 `schema-p1.sql`（如果 P1 时没执行）
+数据库绑定名为 `myai`，表结构由以下文件定义：
 
-> ⚠️ 本版本已将向量维度升级为 1024（Cloudflare Workers AI `@cf/baai/bge-m3`）。
-> 如果你之前已写入 768 维 embedding，请先将旧值置空再升级：
->
-> ```sql
-> UPDATE memory_snapshots SET embedding = NULL;
-> ```
+- `schema-d1-knowledgeos.sql`：租户、机器人、文档、会话、人设、用量等表
+- `schema-d1-memory-chat.sql`：聊天记录、核心记忆、记忆快照、用户套餐、应用设置
 
-```sql
--- 确认 personas 表支持多条记录（P0 schema 已经支持，无需改动）
--- 确认 app_settings 表有 active_persona_id（P0 schema 已有）
+执行方式：
+
+```bash
+npx wrangler d1 execute myai --remote --file schema-d1-knowledgeos.sql
+npx wrangler d1 execute myai --remote --file schema-d1-memory-chat.sql
 ```
 
 ## 新增目录
@@ -55,32 +53,25 @@ mkdir -p functions/api/memory
 
 ## 语音成本分层（Free/Pro）
 
-- Free：Deepgram ASR + Google TTS，默认每日 10 分钟（按 **Supabase user_id** 计）
+- Free：Deepgram ASR + Google TTS，默认每日 10 分钟（按 Clerk user_id 计）
 - Pro ：Deepgram ASR + ElevenLabs TTS
 
 需要在 Cloudflare Pages 里配置：
 
 - 环境变量：
   - `DEEPGRAM_API_KEY`、`GOOGLE_TTS_API_KEY`、`ELEVENLABS_API_KEY`（可选）、`ELEVENLABS_VOICE_ID`（可选）
-  - `SUPABASE_URL`、`SUPABASE_SERVICE_KEY`、`SUPABASE_JWT_ISS`、`SUPABASE_JWT_AUD`
 - KV 绑定：`VOICE_KV`（用于免费用户每日配额）
 
-## 登录（Supabase Magic Link）
+## 登录（Clerk）
 
-Sidebar 底部提供最小登录组件：输入邮箱发送 Magic Link。
+Sidebar 底部的登录入口跳转到 `/auth/login`，由 Clerk 处理登录和注册。
 
-客户端（Next.js）需要配置：
-
-- `.env.local`：`NEXT_PUBLIC_SUPABASE_URL`、`NEXT_PUBLIC_SUPABASE_ANON_KEY`
-
-服务端（Cloudflare Pages Functions）需要配置：
-
-- `SUPABASE_URL`、`SUPABASE_SERVICE_KEY`、`SUPABASE_JWT_ISS`（通常 `${SUPABASE_URL}/auth/v1`）、`SUPABASE_JWT_AUD`（通常 `authenticated`）
-- 若 `/auth/v1/certs` 返回 401，可额外配置 `SUPABASE_ANON_KEY`（后端验签拉 JWKS 时会优先使用该 key）
+- 客户端：`NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY`（写在 `.env.local`，构建时注入）
+- 服务端 Worker：`CLERK_SECRET_KEY`（用 `npx wrangler secret put CLERK_SECRET_KEY` 设置）
 - `GEMINI_API_KEY`（图片分析专用，`/api/chat` 有图时走 `gemini-2.5-flash-lite`）
 - 可选：`GEMINI_VISION_MODEL`（默认 `gemini-2.5-flash-lite`）
 
-> `/api/voice` 已强制要求登录：请求必须带 `Authorization: Bearer <access_token>`。
+> `/api/voice` 已强制要求登录：请求必须带 `Authorization: Bearer <Clerk session token>`。
 
 ## 全项目完成！
 

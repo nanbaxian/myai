@@ -2,12 +2,12 @@
 // POST /api/voice  — STT (Deepgram)
 // GET  /api/voice?text=xxx  — TTS (Free: Google TTS | Pro: ElevenLabs)
 //
-// ✅ 本版改造：按 Supabase Auth 的 user_id 计费/限额
+// ✅ 本版改造：按 Clerk 的 user_id 计费/限额
 // - Free：每日 10 分钟（KV 记录 used seconds，key = voice:{userId}:{YYYY-MM-DD}）
-// - Pro ：默认不限制（从 Supabase 表 user_plans 读取）
+// - Pro ：默认不限制（从 D1 表 user_plans 读取）
 //
 // 认证：
-// - 必须携带 Authorization: Bearer <supabase access_token>
+// - 必须携带 Authorization: Bearer <Clerk session token>
 // - 后端使用 JWKS 验签（/auth/v1/certs）
 
 import { verifyClerkToken } from '@/lib/api-middleware'
@@ -28,11 +28,8 @@ interface Env {
   ELEVENLABS_API_KEY?: string
   ELEVENLABS_VOICE_ID?: string
 
-  // Supabase
-  SUPABASE_URL: string
-  SUPABASE_SERVICE_KEY: string
-  SUPABASE_JWT_ISS?: string
-  SUPABASE_JWT_AUD?: string
+  // D1 (user plans)
+  myai?: D1Database
 
   // Quota storage
   VOICE_KV: KVNamespace

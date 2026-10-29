@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { Persona, ReplyLanguage } from '@/types'
 import { AnimatePresence, motion } from 'framer-motion'
 import { Mic, MicOff, PhoneOff, Volume2, VolumeX } from 'lucide-react'
-import { supabase } from '@/lib/supabase-browser'
+import { useAuth } from '@clerk/nextjs'
 import { apiUrl } from '@/lib/api-url'
 import { useI18n } from '@/lib/i18n/context'
 
@@ -116,6 +116,7 @@ async function speakWithBrowserTts(text: string, lang: ReplyLanguage): Promise<b
 
 export default function VoiceCallOverlay({ persona, isOpen, onClose, replyLanguage, onVoiceTurn }: Props) {
   const { t } = useI18n()
+  const { getToken } = useAuth()
   const [isMuted, setIsMuted] = useState(false)
   const [isSpeakerOff, setIsSpeakerOff] = useState(false)
   const [callDuration, setCallDuration] = useState(0)
@@ -269,8 +270,7 @@ export default function VoiceCallOverlay({ persona, isOpen, onClose, replyLangua
     setCallError('')
 
     try {
-      const sess = await supabase.auth.getSession()
-      const token = sess.data.session?.access_token
+      const token = await getToken()
       if (!token) throw new Error(t('voice.loginRequired'))
 
       const ext = blob.type.includes('mp4') ? 'mp4' : 'webm'

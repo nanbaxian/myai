@@ -18,7 +18,6 @@ This repository is being converted from a personal AI companion into a multi-ten
   - `/auth/register`
 - Demo chat route was added at `/chat/demo`.
 - Cloudflare configuration was renamed and rebuilt for KnowledgeOS.
-- New PostgreSQL schema file added at `schema-knowledgeos.sql`.
 - KnowledgeOS API scaffolds were added under `functions/api/`.
 
 ## Cloudflare resources to recreate
@@ -34,20 +33,14 @@ This repository is being converted from a personal AI companion into a multi-ten
 Set these in Cloudflare Pages and local dev as needed:
 
 - `NEXT_PUBLIC_SITE_URL`
-- `NEXT_PUBLIC_SUPABASE_URL`
-- `NEXT_PUBLIC_SUPABASE_ANON_KEY`
-- `SUPABASE_SERVICE_KEY`
-- `SUPABASE_JWT_ISS`
-- `SUPABASE_JWT_AUD`
 - `DEEPINFRA_API_KEY`
 - `GEMINI_API_KEY`
 - `CRON_SECRET`
 
 ## Database
 
-Apply `schema-knowledgeos-d1.sql` to the Cloudflare D1 database before wiring the Pages Functions.
+Apply `schema-d1-knowledgeos.sql` and `schema-d1-memory-chat.sql` to the Cloudflare D1 database (`myai`) before wiring the API routes.
 
-Apply `schema-knowledgeos.sql` to the external Postgres instance later for RAG chunks and vectors.
 
 The schema includes:
 

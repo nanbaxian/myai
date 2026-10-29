@@ -3,7 +3,7 @@
 import { useRef, useState } from 'react'
 import { ImageIcon, Phone, SendHorizontal, X } from 'lucide-react'
 import { Persona, ReplyLanguage } from '@/types'
-import { supabase } from '@/lib/supabase-browser'
+import { useAuth } from '@clerk/nextjs'
 import { apiUrl } from '@/lib/api-url'
 import { useI18n } from '@/lib/i18n/context'
 
@@ -35,6 +35,7 @@ export default function InputArea({
   voiceCallOpen,
 }: Props) {
   const { t } = useI18n()
+  const { getToken } = useAuth()
   const [text, setText] = useState('')
   const [pendingImage, setPendingImage] = useState<{ preview: string } | null>(null)
   const [pendingImageFile, setPendingImageFile] = useState<File | null>(null)
@@ -66,8 +67,7 @@ export default function InputArea({
     ;(async () => {
       try {
         if (pendingImageFile) {
-          const sess = await supabase.auth.getSession()
-          const token = sess.data.session?.access_token
+          const token = await getToken()
           if (!token) {
             setUiError(t('input.loginBeforeImage'))
             setTimeout(() => setUiError(''), 3000)

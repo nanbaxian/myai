@@ -1,21 +1,7 @@
 // lib/api-middleware.ts
 // Middleware for Clerk JWT verification in Cloudflare Workers
 
-import { createClient } from '@supabase/supabase-js'
 import type { AuthUser } from './clerk-server'
-
-export interface ApiContext {
-  userId: string
-  email?: string
-  supabaseUrl: string
-  supabaseKey: string
-}
-
-export function createSupabaseClient(url: string, key: string) {
-  return createClient(url, key, {
-    auth: { persistSession: false },
-  })
-}
 
 export async function verifyClerkToken(authHeader: string): Promise<AuthUser> {
   if (!authHeader?.startsWith('Bearer ')) {

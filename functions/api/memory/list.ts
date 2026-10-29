@@ -1,64 +1,65 @@
 // functions/api/memory/list.ts
-// GET /api/memory/list -> 侧边栏三层记忆列表
+// GET /api/memory/list: a short preview of core, short-term and snapshot memories
 
-import type { CoreMemory, MemorySnapshot, DbMessage } from '../../../types/index'
+import type { CoreMemory, DbMessage } from '../../../types/index'
 import { createApiLogger } from '../../../lib/api-log'
+import { dbAll, dbFirst, type D1Env } from '../../../lib/knowledgeos-d1'
 
-interface Env {
-  SUPABASE_URL: string
-  SUPABASE_SERVICE_KEY: string
-}
+type Env = D1Env
 
-const cors = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Methods': 'GET, OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type',
-}
-
-function sb(key: string): Record<string, string> {
-  return { apikey: key, Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' }
-}
+const cors = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Methods': 'GET, OPTIONS', 'Access-Control-Allow-Headers': 'Content-Type' }
 
 export const onRequestOptions = (): Response => new Response(null, { headers: cors })
 
 export const onRequestGet: PagesFunction<Env> = async (ctx) => {
-  const { env } = ctx
   const log = createApiLogger('memory:list:get', ctx)
   log.start()
   try {
-    const base = env.SUPABASE_URL
-    const h = sb(env.SUPABASE_SERVICE_KEY)
+    const { env } = ctx
 
-    const settingRes = await fetch(`${base}/rest/v1/app_settings?key=eq.active_persona_id`, { headers: h })
-    const [setting] = await settingRes.json() as Array<{ value: unknown }>
+    const setting = await dbFirst<{ value: string | null }>(env, `SELECT value FROM app_settings WHERE key = 'active_persona_id'`)
     let personaId: string | null = null
     if (setting?.value) {
-      const v = setting.value
-      personaId = typeof v === 'string' ? (() => { try { return JSON.parse(v) } catch { return v } })() : String(v)
+      try {
+        const parsed = JSON.parse(setting.value)
+        personaId = typeof parsed === 'string' ? parsed : String(parsed)
+      } catch {
+        personaId = setting.value
+      }
     }
 
-    const shortFilter = personaId
-      ? `role=eq.user&persona_id=eq.${personaId}&memory_tier=eq.short`
-      : 'role=eq.user&memory_tier=eq.short'
-
-    const [coreRes, snapRes, shortRes] = await Promise.all([
-      fetch(`${base}/rest/v1/core_memories?select=id,fact,importance&order=importance.desc&limit=3`, { headers: h }),
-      fetch(`${base}/rest/v1/memory_snapshots?select=id,tier,summary_text,key_facts&order=period_end.desc&limit=5`, { headers: h }),
-      fetch(`${base}/rest/v1/messages?select=id,content&${shortFilter}&order=created_at.desc&limit=3`, { headers: h }),
+    const [core, snaps, shorts] = await Promise.all([
+      dbAll<CoreMemory>(env, `SELECT id, fact, importance FROM core_memories ORDER BY importance DESC LIMIT 3`),
+      dbAll<{ id: string; tier: string; summary_text: string; key_facts: string }>(
+        env,
+        `SELECT id, tier, summary_text, key_facts FROM memory_snapshots ORDER BY period_end DESC LIMIT 5`,
+      ),
+      personaId
+        ? dbAll<Pick<DbMessage, 'id' | 'content'>>(
+            env,
+            `SELECT id, content FROM messages WHERE role = 'user' AND persona_id = ? AND memory_tier = 'short' ORDER BY created_at DESC LIMIT 3`,
+            [personaId],
+          )
+        : dbAll<Pick<DbMessage, 'id' | 'content'>>(
+            env,
+            `SELECT id, content FROM messages WHERE role = 'user' AND memory_tier = 'short' ORDER BY created_at DESC LIMIT 3`,
+          ),
     ])
 
-    const core: CoreMemory[] = coreRes.ok ? await coreRes.json() : []
-    const snaps: MemorySnapshot[] = snapRes.ok ? await snapRes.json() : []
-    const shorts: DbMessage[] = shortRes.ok ? await shortRes.json() : []
-
     const result: Array<{ id: string; tier: string; content: string }> = []
-    for (const m of core) result.push({ id: m.id, tier: 'core', content: m.fact })
-    for (const m of shorts) {
+    for (const m of core ?? []) result.push({ id: m.id, tier: 'core', content: m.fact })
+    for (const m of shorts ?? []) {
       const preview = m.content.length > 40 ? `${m.content.slice(0, 40)}...` : m.content
       result.push({ id: m.id, tier: 'short', content: preview })
     }
-    for (const s of snaps) {
-      const facts: string[] = Array.isArray(s.key_facts) ? s.key_facts : []
+    for (const s of snaps ?? []) {
+      let facts: string[] = []
+      try {
+        const parsed = JSON.parse(s.key_facts)
+        facts = Array.isArray(parsed) ? parsed : []
+      } catch {
+        facts = []
+      }
       const content = facts[0] ?? s.summary_text?.slice(0, 50) ?? ''
       result.push({ id: s.id, tier: s.tier, content })
     }
@@ -75,4 +76,3 @@ export const onRequestGet: PagesFunction<Env> = async (ctx) => {
     })
   }
 }
-
