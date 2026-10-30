@@ -1,25 +1,14 @@
 'use client'
 
 import { useState } from 'react'
-import { ArrowUpRight, CheckCircle2, Quote, Sparkles } from 'lucide-react'
+import { useAuth } from '@clerk/nextjs'
+import { ArrowUpRight, Sparkles } from 'lucide-react'
 
-type DemoMessage = { id: number; role: 'user' | 'assistant'; content: string }
-
-const citations = [
-  {
-    label: 'Knowledge base | Refund policy | Page 12',
-    text: 'This answer was grounded in the refund policy and the latest service terms.',
-  },
-  {
-    label: 'Product manual | Setup guide | Section 3',
-    text: 'The retrieval layer also surfaced the installation steps from the product manual.',
-  },
-]
+type ChatMessage = { id: number; role: 'user' | 'assistant'; content: string }
 
 export default function KnowledgeChatDemo({ botId }: { botId: string }) {
-  const [messages, setMessages] = useState<DemoMessage[]>([
-    { id: 0, role: 'assistant', content: 'Hello. Ask me a question about the knowledge base.' },
-  ])
+  const { getToken } = useAuth()
+  const [messages, setMessages] = useState<ChatMessage[]>([])
   const [input, setInput] = useState('')
   const [sending, setSending] = useState(false)
 
@@ -38,10 +27,11 @@ export default function KnowledgeChatDemo({ botId }: { botId: string }) {
     const replyId = nextId + 1
 
     try {
+      const token = await getToken()
       const res = await fetch('/api/chat', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message, bot_id: `bot_${botId}`, replyLanguage: 'en' }),
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ message, bot_id: botId, replyLanguage: 'zh' }),
       })
       if (!res.ok || !res.body) throw new Error(`HTTP ${res.status}`)
 
@@ -69,7 +59,7 @@ export default function KnowledgeChatDemo({ botId }: { botId: string }) {
       }
     } catch {
       setMessages(prev =>
-        prev.map(m => (m.id === replyId ? { ...m, content: 'Sorry, the request failed. Please try again.' } : m)),
+        prev.map(m => (m.id === replyId ? { ...m, content: '请求失败，请稍后重试。' } : m)),
       )
     } finally {
       setSending(false)
@@ -78,33 +68,23 @@ export default function KnowledgeChatDemo({ botId }: { botId: string }) {
 
   return (
     <main className="min-h-screen bg-[#0b0e13] px-6 py-8 text-white">
-      <div className="mx-auto grid max-w-7xl gap-6 lg:grid-cols-[280px_minmax(0,1fr)_300px]">
-        <aside className="rounded-[2rem] border border-white/10 bg-white/6 p-5 backdrop-blur-xl">
-          <div className="text-xs uppercase tracking-[0.28em] text-amber-100/80">Bot demo</div>
-          <h1 className="mt-3 text-2xl font-semibold">bot/{botId}</h1>
-          <p className="mt-3 text-sm leading-7 text-white/60">
-            This route is a public-facing chat shell for the PRD. Connect the Worker API and citations layer here next.
-          </p>
-          <div className="mt-6 space-y-3 text-sm text-white/70">
-            <div className="rounded-2xl border border-white/10 bg-slate-950/45 px-4 py-3">Multi-tenant prompt controls</div>
-            <div className="rounded-2xl border border-white/10 bg-slate-950/45 px-4 py-3">Streamed answers and source cards</div>
-            <div className="rounded-2xl border border-white/10 bg-slate-950/45 px-4 py-3">Public widget phase later</div>
-          </div>
-        </aside>
-
+      <div className="mx-auto max-w-3xl">
         <section className="rounded-[2rem] border border-white/10 bg-[linear-gradient(180deg,rgba(255,255,255,0.07),rgba(255,255,255,0.03))] p-5 backdrop-blur-xl">
           <div className="flex items-center justify-between gap-4 border-b border-white/10 pb-4">
             <div>
-              <div className="text-xs uppercase tracking-[0.28em] text-amber-100/80">Live chat shell</div>
-              <h2 className="mt-2 text-xl font-semibold">KnowledgeOS Assistant</h2>
+              <div className="text-xs uppercase tracking-[0.28em] text-amber-100/80">{botId}</div>
+              <h1 className="mt-2 text-xl font-semibold">Knowledge Assistant</h1>
             </div>
             <div className="inline-flex items-center gap-2 rounded-full border border-emerald-400/20 bg-emerald-400/10 px-3 py-1 text-xs text-emerald-100">
               <Sparkles className="h-3.5 w-3.5" />
-              RAG ready
+              知识库问答
             </div>
           </div>
 
           <div className="space-y-4 py-5">
+            {messages.length === 0 && (
+              <div className="text-sm text-white/50">请输入问题，助手会基于已上传的知识库文档回答。</div>
+            )}
             {messages.map(m =>
               m.role === 'user' ? (
                 <div
@@ -116,7 +96,7 @@ export default function KnowledgeChatDemo({ botId }: { botId: string }) {
               ) : (
                 <div
                   key={m.id}
-                  className="max-w-2xl rounded-[1.5rem] rounded-bl-md border border-white/10 bg-white/6 px-4 py-4 text-sm leading-7 text-white/80"
+                  className="max-w-2xl whitespace-pre-wrap rounded-[1.5rem] rounded-bl-md border border-white/10 bg-white/6 px-4 py-4 text-sm leading-7 text-white/80"
                 >
                   {m.content || (sending ? '…' : '')}
                 </div>
@@ -131,15 +111,15 @@ export default function KnowledgeChatDemo({ botId }: { botId: string }) {
               void handleSend()
             }}
           >
-            <label htmlFor="demo-question" className="text-xs uppercase tracking-[0.24em] text-white/45">
-              Ask a question
+            <label htmlFor="chat-question" className="text-xs uppercase tracking-[0.24em] text-white/45">
+              提问
             </label>
             <div className="mt-3 flex gap-3">
               <input
-                id="demo-question"
+                id="chat-question"
                 value={input}
                 onChange={e => setInput(e.target.value)}
-                placeholder="Type your question"
+                placeholder="输入你的问题"
                 className="min-w-0 flex-1 rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white outline-none placeholder:text-white/35"
               />
               <button
@@ -147,32 +127,12 @@ export default function KnowledgeChatDemo({ botId }: { botId: string }) {
                 disabled={sending || !input.trim()}
                 className="inline-flex items-center gap-2 rounded-full bg-white px-5 py-3 text-sm font-medium text-slate-950 disabled:opacity-50"
               >
-                Send
+                发送
                 <ArrowUpRight className="h-4 w-4" />
               </button>
             </div>
           </form>
         </section>
-
-        <aside className="rounded-[2rem] border border-white/10 bg-white/6 p-5 backdrop-blur-xl">
-          <div className="text-xs uppercase tracking-[0.28em] text-amber-100/80">Citations</div>
-          <div className="mt-4 space-y-3">
-            {citations.map(item => (
-              <article key={item.label} className="rounded-2xl border border-white/10 bg-slate-950/50 p-4">
-                <div className="flex items-start gap-2 text-sm font-medium text-white">
-                  <Quote className="mt-0.5 h-4 w-4 text-amber-100" />
-                  <span>{item.label}</span>
-                </div>
-                <p className="mt-3 text-sm leading-7 text-white/65">{item.text}</p>
-              </article>
-            ))}
-          </div>
-
-          <div className="mt-6 rounded-2xl border border-emerald-400/20 bg-emerald-400/10 p-4 text-sm text-emerald-100">
-            <CheckCircle2 className="mb-2 h-4 w-4" />
-            Keep this route connected to the Worker once the API layer is rebuilt.
-          </div>
-        </aside>
       </div>
     </main>
   )

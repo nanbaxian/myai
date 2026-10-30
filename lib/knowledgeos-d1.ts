@@ -251,6 +251,22 @@ export async function getBot(env: D1Env, botId: string): Promise<D1Bot | null> {
   return dbFirst<D1Bot>(env, `SELECT * FROM bots WHERE id = ? LIMIT 1`, [botId])
 }
 
+// Returns the tenant the user belongs to. If a tenant is requested, it must be one the user is a member of.
+export async function findMemberTenant(env: D1Env, userId: string, requestedTenantId?: string): Promise<string | null> {
+  const row = requestedTenantId
+    ? await dbFirst<{ tenant_id: string }>(
+        env,
+        `SELECT tenant_id FROM tenant_members WHERE user_id = ? AND tenant_id = ? LIMIT 1`,
+        [userId, requestedTenantId],
+      )
+    : await dbFirst<{ tenant_id: string }>(
+        env,
+        `SELECT tenant_id FROM tenant_members WHERE user_id = ? ORDER BY tenant_id LIMIT 1`,
+        [userId],
+      )
+  return row?.tenant_id ?? null
+}
+
 export async function deleteBot(env: D1Env, botId: string): Promise<boolean> {
   return dbRun(env, `DELETE FROM bots WHERE id = ?`, [botId])
 }

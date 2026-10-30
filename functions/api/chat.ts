@@ -1,6 +1,7 @@
 // functions/api/chat.ts
 // POST /api/chat - KnowledgeOS RAG orchestration entry
 
+import { verifyClerkToken } from '../../lib/api-middleware'
 import { createApiLogger } from '../../lib/api-log'
 import { searchChunks } from '../../lib/kb/retrieve'
 import {
@@ -18,8 +19,8 @@ import {
   getConversation,
   insertMessage,
   listMessages,
+  findMemberTenant,
   parseSettings,
-  readTenantId,
   type D1Bot,
   type D1Env,
   type D1Message,
@@ -286,6 +287,15 @@ export const onRequestPost: PagesFunction<Env> = async ctx => {
   const startedAt = Date.now()
   apiLog.start()
 
+  let userId: string
+  try {
+    const auth = await verifyClerkToken(request.headers.get('Authorization') || '', env.CLERK_SECRET_KEY)
+    userId = auth.userId
+  } catch (error) {
+    apiLog.fail(error, { stage: 'auth' })
+    return errJson('请先登录', 401)
+  }
+
   let body: {
     tenant_id?: string
     bot_id?: string
@@ -305,7 +315,8 @@ export const onRequestPost: PagesFunction<Env> = async ctx => {
     return errJson('请求格式错误', 400)
   }
 
-  const tenantId = body.tenant_id || readTenantId(request)
+  const tenantId = await findMemberTenant(env, userId, body.tenant_id)
+  if (!tenantId) return errJson('无权访问该知识库', 403)
   const message = (body.message || '').trim()
   const voiceMode = body.voice_mode === true
   const replyLanguage: ReplyLanguage = body.replyLanguage === 'en' ? 'en' : 'zh'
@@ -323,6 +334,7 @@ export const onRequestPost: PagesFunction<Env> = async ctx => {
 
   const botId = body.bot_id || 'bot_demo'
   let bot = await getBot(env, botId)
+  if (bot && bot.tenant_id !== tenantId) return errJson('无权访问该 Bot', 403)
   if (!bot && env.myai) {
     bot = await upsertBot(env, botSeed(tenantId, { id: botId }))
   }
