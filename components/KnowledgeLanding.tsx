@@ -16,10 +16,9 @@ const copy: Record<Locale, Copy> = {
     badge: 'KnowledgeOS v1.0 - Enterprise RAG Knowledge Base SaaS',
     nav: { product: 'Product', architecture: 'Architecture', pricing: 'Pricing', roadmap: 'Roadmap' },
     hero: {
-      eyebrow: 'Multi-tenant knowledge ops for SMB and enterprise teams',
-      title: 'Ship a brand-safe knowledge chatbot that cites sources and keeps tenants isolated.',
-      subtitle:
-        'KnowledgeOS turns websites, PDFs, DOCX, and QA packs into an auditable knowledge layer with citations and conversation history.',
+      eyebrow: 'Knowledge chat for teams',
+      title: 'Chat with your documents, with sources.',
+      subtitle: 'Upload websites, PDFs and docs. Get answers with citations.',
       cta: 'Start chatting',
     },
     stats: [
@@ -42,9 +41,9 @@ const copy: Record<Locale, Copy> = {
     badge: 'KnowledgeOS v1.0 - 企业知识库 RAG SaaS',
     nav: { product: '产品', architecture: '架构', pricing: '定价', roadmap: '路线图' },
     hero: {
-      eyebrow: '面向 SMB 与企业团队的多租户知识运营平台',
-      title: '搭建一个可追溯、可审计、支持引用来源的企业知识机器人。',
-      subtitle: 'KnowledgeOS 将官网、PDF、DOCX 和 QA 文档接入统一的知识层，支持引用溯源和会话历史。',
+      eyebrow: '团队知识库问答',
+      title: '基于你的文档问答，每个答案都有出处。',
+      subtitle: '上传网站、PDF 和文档，直接获得带引用的回答。',
       cta: '开始聊天',
     },
     stats: [
@@ -113,9 +112,6 @@ export default function KnowledgeLanding({ locale }: { locale: Locale }) {
             <span>{c.nav.pricing}</span>
             <span>{c.nav.roadmap}</span>
           </nav>
-          <Link href="/chat" className="rounded-full bg-amber-300 px-4 py-2 text-sm font-medium text-slate-950 transition hover:bg-amber-200">
-            {c.hero.cta}
-          </Link>
         </header>
 
         <section className="grid gap-10 lg:grid-cols-[1.2fr_0.8fr] lg:items-center">
