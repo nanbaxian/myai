@@ -107,11 +107,12 @@ export default function KnowledgeChat() {
 
   const handleSubmit = () => {
     const message = input.trim()
-    if (!message || sending || !isLoaded) return
+    if (sending || !isLoaded) return
     if (!isSignedIn) {
       void signInWithGoogle(message)
       return
     }
+    if (!message) return
     setInput('')
     void sendMessage(message)
   }
@@ -174,7 +175,7 @@ export default function KnowledgeChat() {
               />
               <button
                 type="submit"
-                disabled={sending || !input.trim() || !isLoaded}
+                disabled={sending || !isLoaded || (isSignedIn && !input.trim())}
                 className="inline-flex items-center gap-2 rounded-full bg-white px-5 py-3 text-sm font-medium text-slate-950 disabled:opacity-50"
               >
                 {isSignedIn ? '发送' : '登录后发送'}
