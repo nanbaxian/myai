@@ -29,7 +29,7 @@ export const onRequestGet: PagesFunction<D1Env> = async (ctx) => {
   try {
     // Verify Clerk JWT
     const authHeader = request.headers.get('Authorization') || ''
-    const user = await verifyClerkToken(authHeader)
+    const user = await verifyClerkToken(authHeader, env.CLERK_SECRET_KEY)
     log.info('auth:ok', { userId: user.userId })
 
     // Get tenant ID from header or query
@@ -54,7 +54,7 @@ export const onRequestPut: PagesFunction<D1Env> = async (ctx) => {
   try {
     // Verify Clerk JWT
     const authHeader = request.headers.get('Authorization') || ''
-    const user = await verifyClerkToken(authHeader)
+    const user = await verifyClerkToken(authHeader, env.CLERK_SECRET_KEY)
     log.info('auth:ok', { userId: user.userId })
 
     const body = (await request.json()) as { persona_id?: string }

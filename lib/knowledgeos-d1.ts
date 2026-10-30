@@ -1,4 +1,4 @@
-export type D1Env = { myai?: D1Database }
+export type D1Env = { myai?: D1Database; CLERK_SECRET_KEY: string }
 
 export type D1Tenant = {
   id: string

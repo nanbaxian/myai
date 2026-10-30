@@ -1,35 +1,27 @@
 // lib/api-middleware.ts
 // Middleware for Clerk JWT verification in Cloudflare Workers
 
+import { verifyToken } from '@clerk/backend'
 import type { AuthUser } from './clerk-server'
 
-export async function verifyClerkToken(authHeader: string): Promise<AuthUser> {
+export async function verifyClerkToken(authHeader: string, secretKey: string): Promise<AuthUser> {
   if (!authHeader?.startsWith('Bearer ')) {
     throw new Error('Missing or invalid Authorization header')
   }
 
   const token = authHeader.slice(7)
 
-  // For worker environments, verify via Clerk API
+  // Verify the session JWT locally against Clerk's JWKS, signed with the secret key
   try {
-    const res = await fetch('https://api.clerk.com/v1/verify', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ token }),
-    })
+    const payload = await verifyToken(token, { secretKey })
 
-    if (!res.ok) {
-      throw new Error(`Clerk verification failed: ${res.status}`)
-    }
-
-    const data = (await res.json()) as { sub?: string; user_id?: string; email?: string; email_verified?: boolean }
-    const userId = data.sub || data.user_id
+    const userId = payload.sub
     if (!userId) throw new Error('Invalid Clerk token: missing user id')
 
     return {
       userId,
-      email: data.email,
-      emailVerified: data.email_verified,
+      email: payload.email as string | undefined,
+      emailVerified: payload.email_verified as boolean | undefined,
     }
   } catch (err) {
     throw new Error(`Invalid Clerk token: ${err instanceof Error ? err.message : 'unknown'}`)

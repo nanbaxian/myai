@@ -17,6 +17,7 @@ import { createApiLogger } from '@/lib/api-log'
 
 interface Env {
   BUCKET: R2Bucket
+  CLERK_SECRET_KEY: string
 
   // Free tier
   DEEPGRAM_API_KEY: string
@@ -135,7 +136,7 @@ export const onRequestPost: PagesFunction<Env> = async (ctx) => {
   let userId = ''
   try {
     const authHeader = request.headers.get('Authorization') || ''
-    const u = await verifyClerkToken(authHeader)
+    const u = await verifyClerkToken(authHeader, env.CLERK_SECRET_KEY)
     userId = u.userId
     log.info('auth:ok', { userId })
   } catch (e) {
@@ -320,7 +321,7 @@ export const onRequestGet: PagesFunction<Env> = async (ctx) => {
   let userId = ''
   try {
     const authHeader = request.headers.get('Authorization') || ''
-    const u = await verifyClerkToken(authHeader)
+    const u = await verifyClerkToken(authHeader, env.CLERK_SECRET_KEY)
     userId = u.userId
     log.info('auth:ok', { userId })
   } catch (e) {

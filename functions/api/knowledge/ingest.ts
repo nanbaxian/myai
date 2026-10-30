@@ -32,7 +32,7 @@ export const onRequestPost: PagesFunction<Env> = async ctx => {
 
   let userId: string
   try {
-    const auth = await verifyClerkToken(request.headers.get('Authorization') || '')
+    const auth = await verifyClerkToken(request.headers.get('Authorization') || '', env.CLERK_SECRET_KEY)
     userId = auth.userId
   } catch (e: any) {
     log.fail(e, { stage: 'auth' })

@@ -1,4 +1,9 @@
+'use client'
+
+import { useState } from 'react'
 import { ArrowUpRight, CheckCircle2, Quote, Sparkles } from 'lucide-react'
+
+type DemoMessage = { id: number; role: 'user' | 'assistant'; content: string }
 
 const citations = [
   {
@@ -12,6 +17,65 @@ const citations = [
 ]
 
 export default function KnowledgeChatDemo({ botId }: { botId: string }) {
+  const [messages, setMessages] = useState<DemoMessage[]>([
+    { id: 0, role: 'assistant', content: 'Hello. Ask me a question about the knowledge base.' },
+  ])
+  const [input, setInput] = useState('')
+  const [sending, setSending] = useState(false)
+
+  const handleSend = async () => {
+    const message = input.trim()
+    if (!message || sending) return
+
+    const nextId = messages.length
+    setInput('')
+    setSending(true)
+    setMessages(prev => [
+      ...prev,
+      { id: nextId, role: 'user', content: message },
+      { id: nextId + 1, role: 'assistant', content: '' },
+    ])
+    const replyId = nextId + 1
+
+    try {
+      const res = await fetch('/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message, bot_id: `bot_${botId}`, replyLanguage: 'en' }),
+      })
+      if (!res.ok || !res.body) throw new Error(`HTTP ${res.status}`)
+
+      const reader = res.body.getReader()
+      const decoder = new TextDecoder()
+      let lineBuffer = ''
+      let aiContent = ''
+
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+        lineBuffer += decoder.decode(value, { stream: true })
+        const lines = lineBuffer.split('\n')
+        lineBuffer = lines.pop() ?? ''
+
+        for (const line of lines) {
+          if (!line.startsWith('data: ')) continue
+          const data = JSON.parse(line.slice(6)) as { text?: string; error?: string }
+          if (data.error) throw new Error(data.error)
+          if (data.text) {
+            aiContent += data.text
+            setMessages(prev => prev.map(m => (m.id === replyId ? { ...m, content: aiContent } : m)))
+          }
+        }
+      }
+    } catch {
+      setMessages(prev =>
+        prev.map(m => (m.id === replyId ? { ...m, content: 'Sorry, the request failed. Please try again.' } : m)),
+      )
+    } finally {
+      setSending(false)
+    }
+  }
+
   return (
     <main className="min-h-screen bg-[#0b0e13] px-6 py-8 text-white">
       <div className="mx-auto grid max-w-7xl gap-6 lg:grid-cols-[280px_minmax(0,1fr)_300px]">
@@ -41,31 +105,53 @@ export default function KnowledgeChatDemo({ botId }: { botId: string }) {
           </div>
 
           <div className="space-y-4 py-5">
-            <div className="max-w-2xl rounded-[1.5rem] rounded-bl-md border border-white/10 bg-white/6 px-4 py-4 text-sm leading-7 text-white/80">
-              Hello. I found the answer in the knowledge base and attached the source hints below.
-            </div>
-            <div className="ml-auto max-w-2xl rounded-[1.5rem] rounded-br-md border border-amber-300/20 bg-amber-300 px-4 py-4 text-sm leading-7 text-slate-950">
-              What is the official refund window for annual subscriptions?
-            </div>
-            <div className="max-w-2xl rounded-[1.5rem] rounded-bl-md border border-white/10 bg-white/6 px-4 py-4 text-sm leading-7 text-white/80">
-              Annual subscriptions can be refunded within 14 days when the contract has not been materially consumed.
-            </div>
+            {messages.map(m =>
+              m.role === 'user' ? (
+                <div
+                  key={m.id}
+                  className="ml-auto max-w-2xl rounded-[1.5rem] rounded-br-md border border-amber-300/20 bg-amber-300 px-4 py-4 text-sm leading-7 text-slate-950"
+                >
+                  {m.content}
+                </div>
+              ) : (
+                <div
+                  key={m.id}
+                  className="max-w-2xl rounded-[1.5rem] rounded-bl-md border border-white/10 bg-white/6 px-4 py-4 text-sm leading-7 text-white/80"
+                >
+                  {m.content || (sending ? '…' : '')}
+                </div>
+              ),
+            )}
           </div>
 
-          <div className="rounded-[1.5rem] border border-white/10 bg-slate-950/55 p-4">
-            <label className="text-xs uppercase tracking-[0.24em] text-white/45">Ask a question</label>
+          <form
+            className="rounded-[1.5rem] border border-white/10 bg-slate-950/55 p-4"
+            onSubmit={e => {
+              e.preventDefault()
+              void handleSend()
+            }}
+          >
+            <label htmlFor="demo-question" className="text-xs uppercase tracking-[0.24em] text-white/45">
+              Ask a question
+            </label>
             <div className="mt-3 flex gap-3">
               <input
-                value="How does source citation work?"
-                readOnly
-                className="min-w-0 flex-1 rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white outline-none"
+                id="demo-question"
+                value={input}
+                onChange={e => setInput(e.target.value)}
+                placeholder="Type your question"
+                className="min-w-0 flex-1 rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white outline-none placeholder:text-white/35"
               />
-              <button className="inline-flex items-center gap-2 rounded-full bg-white px-5 py-3 text-sm font-medium text-slate-950">
+              <button
+                type="submit"
+                disabled={sending || !input.trim()}
+                className="inline-flex items-center gap-2 rounded-full bg-white px-5 py-3 text-sm font-medium text-slate-950 disabled:opacity-50"
+              >
                 Send
                 <ArrowUpRight className="h-4 w-4" />
               </button>
             </div>
-          </div>
+          </form>
         </section>
 
         <aside className="rounded-[2rem] border border-white/10 bg-white/6 p-5 backdrop-blur-xl">

@@ -7,6 +7,7 @@ import { createApiLogger } from '@/lib/api-log'
 
 interface Env {
   BUCKET: R2Bucket
+  CLERK_SECRET_KEY: string
 }
 
 const cors = {
@@ -27,7 +28,7 @@ export const onRequestPost: PagesFunction<Env> = async (ctx) => {
   let userId = 'unknown'
   try {
     const authHeader = request.headers.get('Authorization') || ''
-    const auth = await verifyClerkToken(authHeader)
+    const auth = await verifyClerkToken(authHeader, env.CLERK_SECRET_KEY)
     userId = auth.userId
     log.info('auth:ok', { userId })
   } catch (e: any) {

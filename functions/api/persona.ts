@@ -28,7 +28,7 @@ export const onRequestGet: PagesFunction<D1Env> = async ctx => {
   log.start()
   try {
     const authHeader = request.headers.get('Authorization') || ''
-    const user = await verifyClerkToken(authHeader)
+    const user = await verifyClerkToken(authHeader, env.CLERK_SECRET_KEY)
     const tenantId = readTenantId(request)
 
     const persona = await getActivePersona(env, tenantId)
@@ -46,7 +46,7 @@ export const onRequestPut: PagesFunction<D1Env> = async ctx => {
   log.start()
   try {
     const authHeader = request.headers.get('Authorization') || ''
-    const user = await verifyClerkToken(authHeader)
+    const user = await verifyClerkToken(authHeader, env.CLERK_SECRET_KEY)
 
     const body = (await request.json()) as Partial<D1Persona>
     const { name, name_en, avatar, prompt, prompt_en, reply_style } = body
