@@ -65,7 +65,7 @@ export default function KnowledgeAuthPageClerk({ mode }: { mode: Mode }) {
             <Link href="/dashboard" className="hover:text-white">
               Skip to dashboard shell
             </Link>
-            <Link href="/chat/demo" className="hover:text-white">
+            <Link href="/chat" className="hover:text-white">
               Open demo chat
             </Link>
           </div>

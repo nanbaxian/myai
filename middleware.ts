@@ -5,7 +5,6 @@ import { clerkMiddleware, createRouteMatcher } from '@clerk/nextjs/server'
 // requests to an HTML page. The API handlers verify the Bearer token themselves.
 const isProtectedRoute = createRouteMatcher([
   '/dashboard(.*)',
-  '/chat(.*)',
 ])
 
 export default clerkMiddleware(async (auth, req) => {

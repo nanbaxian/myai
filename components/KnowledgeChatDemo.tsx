@@ -1,39 +1,64 @@
 'use client'
 
-import { useState } from 'react'
-import { useAuth } from '@clerk/nextjs'
+import { useEffect, useRef, useState } from 'react'
+import { useAuth, useSignIn } from '@clerk/nextjs'
 import { ArrowUpRight, Sparkles } from 'lucide-react'
 
 type ChatMessage = { id: number; role: 'user' | 'assistant'; content: string }
 
-export default function KnowledgeChatDemo({ botId }: { botId: string }) {
-  const { getToken } = useAuth()
+// A question typed before signing in is kept here so it can be sent after the Google redirect.
+const PENDING_KEY = 'chat:pendingQuestion'
+
+export default function KnowledgeChat() {
+  const { getToken, isLoaded, isSignedIn } = useAuth()
+  const { signIn, isLoaded: signInLoaded } = useSignIn()
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [input, setInput] = useState('')
   const [sending, setSending] = useState(false)
+  const nextIdRef = useRef(0)
 
-  const handleSend = async () => {
-    const message = input.trim()
-    if (!message || sending) return
+  const signInWithGoogle = async (question: string) => {
+    if (!signInLoaded) return
+    try {
+      sessionStorage.setItem(PENDING_KEY, question)
+    } catch {
+      // Storage can be unavailable (private mode); the user can retype after login.
+    }
+    await signIn.authenticateWithRedirect({
+      strategy: 'oauth_google',
+      redirectUrl: '/sso-callback',
+      redirectUrlComplete: '/chat',
+    })
+  }
 
-    const nextId = messages.length
-    setInput('')
+  const sendMessage = async (message: string) => {
+    if (sending) return
+
     setSending(true)
+    const userId = nextIdRef.current++
+    const replyId = nextIdRef.current++
     setMessages(prev => [
       ...prev,
-      { id: nextId, role: 'user', content: message },
-      { id: nextId + 1, role: 'assistant', content: '' },
+      { id: userId, role: 'user', content: message },
+      { id: replyId, role: 'assistant', content: '' },
     ])
-    const replyId = nextId + 1
 
     try {
       const token = await getToken()
       const res = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ message, bot_id: botId, replyLanguage: 'zh' }),
+        body: JSON.stringify({ message, replyLanguage: 'zh' }),
       })
-      if (!res.ok || !res.body) throw new Error(`HTTP ${res.status}`)
+      if (!res.ok || !res.body) {
+        const reason =
+          res.status === 401
+            ? '登录已过期，请重新登录。'
+            : res.status === 403
+              ? '你的账号没有访问该知识库的权限。'
+              : '请求失败，请稍后重试。'
+        throw new Error(reason)
+      }
 
       const reader = res.body.getReader()
       const decoder = new TextDecoder()
@@ -57,13 +82,38 @@ export default function KnowledgeChatDemo({ botId }: { botId: string }) {
           }
         }
       }
-    } catch {
-      setMessages(prev =>
-        prev.map(m => (m.id === replyId ? { ...m, content: '请求失败，请稍后重试。' } : m)),
-      )
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : '请求失败，请稍后重试。'
+      setMessages(prev => prev.map(m => (m.id === replyId ? { ...m, content: reason } : m)))
     } finally {
       setSending(false)
     }
+  }
+
+  // After the Google redirect, send the question that was typed before login.
+  useEffect(() => {
+    if (!isLoaded || !isSignedIn) return
+    let pending: string | null = null
+    try {
+      pending = sessionStorage.getItem(PENDING_KEY)
+      sessionStorage.removeItem(PENDING_KEY)
+    } catch {
+      pending = null
+    }
+    if (pending) void sendMessage(pending)
+    // sendMessage is recreated each render; this should run once when auth finishes loading.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isLoaded, isSignedIn])
+
+  const handleSubmit = () => {
+    const message = input.trim()
+    if (!message || sending || !isLoaded) return
+    if (!isSignedIn) {
+      void signInWithGoogle(message)
+      return
+    }
+    setInput('')
+    void sendMessage(message)
   }
 
   return (
@@ -72,12 +122,12 @@ export default function KnowledgeChatDemo({ botId }: { botId: string }) {
         <section className="rounded-[2rem] border border-white/10 bg-[linear-gradient(180deg,rgba(255,255,255,0.07),rgba(255,255,255,0.03))] p-5 backdrop-blur-xl">
           <div className="flex items-center justify-between gap-4 border-b border-white/10 pb-4">
             <div>
-              <div className="text-xs uppercase tracking-[0.28em] text-amber-100/80">{botId}</div>
-              <h1 className="mt-2 text-xl font-semibold">Knowledge Assistant</h1>
+              <div className="text-xs uppercase tracking-[0.28em] text-amber-100/80">MyWorlds</div>
+              <h1 className="mt-2 text-xl font-semibold">知识库问答</h1>
             </div>
             <div className="inline-flex items-center gap-2 rounded-full border border-emerald-400/20 bg-emerald-400/10 px-3 py-1 text-xs text-emerald-100">
               <Sparkles className="h-3.5 w-3.5" />
-              知识库问答
+              基于文档回答
             </div>
           </div>
 
@@ -108,7 +158,7 @@ export default function KnowledgeChatDemo({ botId }: { botId: string }) {
             className="rounded-[1.5rem] border border-white/10 bg-slate-950/55 p-4"
             onSubmit={e => {
               e.preventDefault()
-              void handleSend()
+              handleSubmit()
             }}
           >
             <label htmlFor="chat-question" className="text-xs uppercase tracking-[0.24em] text-white/45">
@@ -124,10 +174,10 @@ export default function KnowledgeChatDemo({ botId }: { botId: string }) {
               />
               <button
                 type="submit"
-                disabled={sending || !input.trim()}
+                disabled={sending || !input.trim() || !isLoaded}
                 className="inline-flex items-center gap-2 rounded-full bg-white px-5 py-3 text-sm font-medium text-slate-950 disabled:opacity-50"
               >
-                发送
+                {isSignedIn ? '发送' : '登录后发送'}
                 <ArrowUpRight className="h-4 w-4" />
               </button>
             </div>

@@ -18,7 +18,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
     `SELECT user_id FROM tenant_members WHERE user_id = ? AND role = 'admin' LIMIT 1`,
     [userId],
   )
-  if (!admin) redirect('/chat/bot_demo')
+  if (!admin) redirect('/chat')
 
   return children
 }
