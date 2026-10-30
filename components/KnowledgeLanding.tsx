@@ -4,8 +4,6 @@ import { ArrowRight, CheckCircle2, Database, FileText, LayoutDashboard, ShieldCh
 type Locale = 'en' | 'zh'
 
 type Copy = {
-  badge: string
-  nav: { product: string; architecture: string; pricing: string; roadmap: string }
   hero: { eyebrow: string; title: string; subtitle: string; cta: string }
   stats: { label: string; value: string }[]
   sections: { pricingTitle: string; roadmapTitle: string; phases: string[] }
@@ -13,8 +11,6 @@ type Copy = {
 
 const copy: Record<Locale, Copy> = {
   en: {
-    badge: 'KnowledgeOS v1.0 - Enterprise RAG Knowledge Base SaaS',
-    nav: { product: 'Product', architecture: 'Architecture', pricing: 'Pricing', roadmap: 'Roadmap' },
     hero: {
       eyebrow: 'Knowledge chat for teams',
       title: 'Chat with your documents, with sources.',
@@ -38,8 +34,6 @@ const copy: Record<Locale, Copy> = {
     },
   },
   zh: {
-    badge: 'KnowledgeOS v1.0 - 企业知识库 RAG SaaS',
-    nav: { product: '产品', architecture: '架构', pricing: '定价', roadmap: '路线图' },
     hero: {
       eyebrow: '团队知识库问答',
       title: '基于你的文档问答，每个答案都有出处。',
@@ -101,19 +95,6 @@ export default function KnowledgeLanding({ locale }: { locale: Locale }) {
     <main className="min-h-screen overflow-hidden bg-[radial-gradient(circle_at_top,_rgba(255,216,140,0.16),_transparent_32%),linear-gradient(180deg,#0e1116_0%,#11161d_44%,#0b0d11_100%)] text-white">
       <div className="absolute inset-x-0 top-0 h-[34rem] bg-[radial-gradient(circle_at_20%_10%,rgba(248,208,122,0.18),transparent_28%),radial-gradient(circle_at_80%_0%,rgba(255,255,255,0.08),transparent_22%)]" />
       <div className="relative mx-auto flex min-h-screen w-full max-w-7xl flex-col px-6 py-6 lg:px-10">
-        <header className="mb-14 flex flex-wrap items-center justify-between gap-4 rounded-full border border-white/10 bg-white/5 px-5 py-3 backdrop-blur-xl">
-          <div>
-            <div className="text-[10px] uppercase tracking-[0.36em] text-amber-200/80">{c.badge}</div>
-            <div className="mt-1 text-sm text-white/80">KnowledgeOS</div>
-          </div>
-          <nav className="flex flex-wrap items-center gap-3 text-sm text-white/75">
-            <span>{c.nav.product}</span>
-            <span>{c.nav.architecture}</span>
-            <span>{c.nav.pricing}</span>
-            <span>{c.nav.roadmap}</span>
-          </nav>
-        </header>
-
         <section className="grid gap-10 lg:grid-cols-[1.2fr_0.8fr] lg:items-center">
           <div>
             <div className="inline-flex items-center gap-2 rounded-full border border-amber-300/25 bg-amber-300/10 px-4 py-2 text-xs uppercase tracking-[0.3em] text-amber-100">
