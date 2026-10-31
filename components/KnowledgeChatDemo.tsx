@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
-import { useAuth, useSignIn } from '@clerk/nextjs'
+import { useAuth, useClerk, useSignIn, useUser } from '@clerk/nextjs'
 import { ArrowUpRight, Sparkles } from 'lucide-react'
 
 type ChatMessage = { id: number; role: 'user' | 'assistant'; content: string }
@@ -12,6 +12,8 @@ const PENDING_KEY = 'chat:pendingQuestion'
 export default function KnowledgeChat() {
   const { getToken, isLoaded, isSignedIn } = useAuth()
   const { signIn, isLoaded: signInLoaded } = useSignIn()
+  const { user } = useUser()
+  const { signOut } = useClerk()
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [input, setInput] = useState('')
   const [sending, setSending] = useState(false)
@@ -120,6 +122,18 @@ export default function KnowledgeChat() {
   return (
     <main className="min-h-screen bg-[#0b0e13] px-6 py-8 text-white">
       <div className="mx-auto max-w-3xl">
+        {isSignedIn && (
+          <div className="mb-4 flex items-center justify-end gap-3 text-xs text-white/60">
+            <span className="min-w-0 truncate">{user?.primaryEmailAddress?.emailAddress}</span>
+            <button
+              type="button"
+              onClick={() => void signOut({ redirectUrl: '/chat' })}
+              className="shrink-0 rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-white/80 hover:bg-white/10"
+            >
+              退出登录
+            </button>
+          </div>
+        )}
         <section className="rounded-[2rem] border border-white/10 bg-[linear-gradient(180deg,rgba(255,255,255,0.07),rgba(255,255,255,0.03))] p-5 backdrop-blur-xl">
           <div className="flex items-center justify-between gap-4 border-b border-white/10 pb-4">
             <div>
